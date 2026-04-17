@@ -168,6 +168,35 @@ interval: 7200   # seconds between updates (only relevant in debug mode)
 - **API error:** Display last cached data, show timestamp of last successful update in status bar
 - **Battery critical (<10%):** Display warning on screen
 
+## Visual Reference
+
+Reference mockups are stored in `docs/mockups/`:
+
+| File | Purpose |
+|------|---------|
+| `layout-display.html` | Full display layout mockup (E-Ink simulation, 800x480) |
+| `weather-icons-full-size.html` | All 18 weather icons at full size (~80x80px) |
+| `weather-icons-chart-size.html` | All 18 weather icons at chart size (~24x24px) |
+
+These HTML files serve as the pixel-level reference for the Pillow renderer. The `renderer.py` module must include a `--preview` mode that outputs a PNG for visual comparison against these mockups.
+
+Layout constants derived from the mockup:
+
+| Element | Value |
+|---------|-------|
+| Status bar height | 30px |
+| Weather section height | 135px |
+| Chart left/right margin | 40px / 42px |
+| Main temperature font size | 56px |
+| Y-axis / X-axis label font size | 15px bold |
+| Min/Max font size | 10px |
+| Avg font size | 15px bold |
+| Data point radius (past) | 8px |
+| Data point radius (today) | 9px |
+| Data point radius (future) | 8px |
+| Chart weather icon size | ~24x24px |
+| Main weather icon size | ~90x90px |
+
 ## Language
 
 - All UI text in German (weekdays: Mo, Di, Mi, Do, Fr, Sa, So; weather descriptions in German)

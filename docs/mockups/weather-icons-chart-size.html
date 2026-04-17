@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Weather Icons — Chart Size Preview</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&display=swap');
+
+  body {
+    background: #2a2a2a;
+    font-family: 'IBM Plex Mono', monospace;
+    color: #ccc;
+    margin: 0;
+    padding: 40px;
+  }
+
+  h1 {
+    text-align: center;
+    font-size: 20px;
+    margin-bottom: 10px;
+    color: #fff;
+  }
+
+  .subtitle {
+    text-align: center;
+    font-size: 13px;
+    color: #888;
+    margin-bottom: 30px;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(9, 1fr);
+    gap: 16px;
+    max-width: 900px;
+    margin: 0 auto;
+  }
+
+  .icon-card {
+    background: #e8e4d9;
+    border-radius: 6px;
+    padding: 12px 8px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+
+  /* Actual chart size: ~24x24px like on the display */
+  .icon-card svg {
+    width: 24px;
+    height: 24px;
+  }
+
+  .icon-card .label {
+    font-size: 8px;
+    color: #555;
+    font-weight: 600;
+  }
+
+  .section-title {
+    grid-column: 1 / -1;
+    color: #aaa;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    border-bottom: 1px solid #444;
+    padding-bottom: 4px;
+    margin-top: 8px;
+  }
+
+  /* Reference size indicator */
+  .ref {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    margin-bottom: 24px;
+    max-width: 900px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .ref-box {
+    background: #e8e4d9;
+    border-radius: 6px;
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .ref-dot {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #000;
+  }
+
+  .ref-dot.today {
+    width: 18px;
+    height: 18px;
+  }
+
+  .ref-label {
+    font-size: 11px;
+    color: #555;
+  }
+</style>
+</head>
+<body>
+
+<h1>Wettersymbole — Chartgröße (~24×24px)</h1>
+<p class="subtitle">So groß werden die Icons über den Datenpunkten auf der Kurve dargestellt</p>
+
+<div class="ref">
+  <div class="ref-box">
+    <div class="ref-dot"></div>
+    <span class="ref-label">Datenpunkt (r=8)</span>
+  </div>
+  <div class="ref-box">
+    <div class="ref-dot today"></div>
+    <span class="ref-label">Heute (r=9)</span>
+  </div>
+  <div class="ref-box">
+    <svg width="24" height="24" viewBox="0 0 80 80" fill="none" stroke="#000" stroke-width="3" stroke-linecap="round">
+      <circle cx="40" cy="40" r="12"/>
+      <line x1="40" y1="10" x2="40" y2="20"/>
+      <line x1="40" y1="60" x2="40" y2="70"/>
+      <line x1="10" y1="40" x2="20" y2="40"/>
+      <line x1="60" y1="40" x2="70" y2="40"/>
+      <line x1="19" y1="19" x2="26" y2="26"/>
+      <line x1="54" y1="54" x2="61" y2="61"/>
+      <line x1="61" y1="19" x2="54" y2="26"/>
+      <line x1="26" y1="54" x2="19" y2="61"/>
+    </svg>
+    <span class="ref-label">Icon (24×24px)</span>
+  </div>
+</div>
+
+<div class="grid">
+
+  <div class="section-title">Himmel</div>
+
+  <div class="icon-card">
+    <svg viewBox="0 0 80 80" fill="none" stroke="#000" stroke-width="3" stroke-linecap="round">
+      <circle cx="40" cy="40" r="12"/>
+      <line x1="40" y1="10" x2="40" y2="20"/>
+      <line x1="40" y1="60" x2="40" y2="70"/>
+      <line x1="10" y1="40" x2="20" y2="40"/>
+      <line x1="60" y1="40" x2="70" y2="40"/>
+      <line x1="19" y1="19" x2="26" y2="26"/>
+      <line x1="54" y1="54" x2="61" y2="61"/>
+      <line x1="61" y1="19" x2="54" y2="26"/>
+      <line x1="26" y1="54" x2="19" y2="61"/>
+    </svg>
+    <div class="label">Sonnig</div>
+  </div>
+
+  <div class="icon-card">
+    <svg viewBox="0 0 80 80" fill="none" stroke="#000" stroke-width="3" stroke-linecap="round">
+      <circle cx="30" cy="26" r="10"/>
+      <line x1="30" y1="8" x2="30" y2="13"/>
+      <line x1="14" y1="26" x2="19" y2="26"/>
+      <line x1="19" y1="15" x2="23" y2="19"/>
+      <line x1="41" y1="15" x2="37" y2="19"/>
+      <line x1="19" y1="37" x2="23" y2="33"/>
+      <path d="M24,56 Q24,44 36,44 Q39,36 48,36 Q60,36 60,48 Q68,48 68,56 Q68,64 60,64 L32,64 Q24,64 24,56 Z" fill="#000" stroke="none"/>
+    </svg>
+    <div class="label">Teils bew.</div>
+  </div>
+
+  <div class="icon-card">
+    <svg viewBox="0 0 80 80" fill="none" stroke="#000" stroke-width="3" stroke-linecap="round">
+      <line x1="16" y1="20" x2="20" y2="24"/>
+      <line x1="12" y1="32" x2="18" y2="32"/>
+      <line x1="24" y1="12" x2="24" y2="18"/>
+      <path d="M20,54 Q20,42 32,42 Q35,34 45,34 Q57,34 57,46 Q65,46 65,54 Q65,62 57,62 L28,62 Q20,62 20,54 Z" fill="#000" stroke="none"/>
+    </svg>
+    <div class="label">Überw. bew.</div>
+  </div>
+
+  <div class="icon-card">
+    <svg viewBox="0 0 80 80" fill="none" stroke="#000" stroke-width="2.5">
+      <path d="M12,46 Q12,34 24,34 Q27,24 40,24 Q55,24 55,38 Q64,38 64,46 Q64,56 55,56 L20,56 Q12,56 12,46 Z" fill="#000" stroke="none"/>
+    </svg>
+    <div class="label">Bewölkt</div>
+  </div>
+
+  <div class="icon-card">
+    <svg viewBox="0 0 80 80" fill="none" stroke="#000" stroke-width="3.5" stroke-linecap="round">
+      <line x1="12" y1="26" x2="68" y2="26"/>
+      <line x1="18" y1="38" x2="62" y2="38"/>
+      <line x1="12" y1="50" x2="68" y2="50"/>
+      <line x1="18" y1="62" x2="62" y2="62"/>
+    </svg>
+    <div class="label">Nebel</div>
+  </div>
+
+  <div class="icon-card" style="visibility:hidden;"></div>
+  <div class="icon-card" style="visibility:hidden;"></div>
+  <div class="icon-card" style="visibility:hidden;"></div>
+  <div class="icon-card" style="visibility:hidden;"></div>
+
+  <div class="section-title">Regen</div>
+
+  <div class="icon-card">
+    <svg viewBox="0 0 80 80" fill="none" stroke="#000" stroke-width="2.5" stroke-linecap="round">
+      <path d="M14,38 Q14,26 26,26 Q29,18 42,18 Q56,18 56,30 Q64,30 64,38 Q64,48 56,48 L22,48 Q14,48 14,38 Z" fill="#000" stroke="none"/>
+      <line x1="28" y1="54" x2="26" y2="62"/>
+      <line x1="44" y1="54" x2="42" y2="62"/>
+    </svg>
+    <div class="label">Niesel</div>
+  </div>
+
+  <div class="icon-card">
+    <svg viewBox="0 0 80 80" fill="none" stroke="#000" stroke-width="2.5" stroke-linecap="round">
+      <path d="M14,36 Q14,24 26,24 Q29,16 42,16 Q56,16 56,28 Q64,28 64,36 Q64,44 56,44 L22,44 Q14,44 14,36 Z" fill="#000" stroke="none"/>
+      <line x1="24" y1="50" x2="21" y2="62"/>
+      <line x1="38" y1="50" x2="35" y2="62"/>
+      <line x1="52" y1="50" x2="49" y2="62"/>
+    </svg>
+    <div class="label">Regen</div>
+  </div>
+
+  <div class="icon-card">
+    <svg viewBox="0 0 80 80" fill="none" stroke="#000" stroke-width="3" stroke-linecap="round">
+      <path d="M14,34 Q14,22 26,22 Q29,14 42,14 Q56,14 56,26 Q64,26 64,34 Q64,42 56,42 L22,42 Q14,42 14,34 Z" fill="#000" stroke="none"/>
+      <line x1="20" y1="48" x2="16" y2="64"/>
+      <line x1="32" y1="48" x2="28" y2="64"/>
+      <line x1="44" y1="48" x2="40" y2="64"/>
+      <line x1="56" y1="48" x2="52" y2="64"/>
+    </svg>
+    <div class="label">Starkregen</div>
+  </div>
+
+  <div class="icon-card">
+    <svg viewBox="0 0 80 80" fill="none" stroke="#000" stroke-width="2.5" stroke-linecap="round">
+      <path d="M14,36 Q14,24 26,24 Q29,16 42,16 Q56,16 56,28 Q64,28 64,36 Q64,44 56,44 L22,44 Q14,44 14,36 Z" fill="#000" stroke="none"/>
+      <line x1="24" y1="50" x2="21" y2="60"/>
+      <line x1="38" y1="50" x2="35" y2="60"/>
+      <line x1="54" y1="50" x2="54" y2="66"/>
+      <line x1="46" y1="58" x2="62" y2="58"/>
+      <line x1="48" y1="52" x2="60" y2="64"/>
+      <line x1="60" y1="52" x2="48" y2="64"/>
+    </svg>
+    <div class="label">Gefr. Regen</div>
+  </div>
+
+  <div class="icon-card">
+    <svg viewBox="0 0 80 80" fill="none" stroke="#000" stroke-width="2.5" stroke-linecap="round">
+      <path d="M12,40 Q12,30 22,28 Q26,16 40,14 Q54,16 56,26 Q60,24 65,28 Q72,32 68,40 Q72,46 65,48 L18,48 Q10,48 12,40 Z" fill="#000" stroke="none"/>
+      <line x1="26" y1="54" x2="24" y2="62"/>
+      <line x1="40" y1="54" x2="38" y2="62"/>
+      <line x1="54" y1="54" x2="52" y2="62"/>
+    </svg>
+    <div class="label">Schauer</div>
+  </div>
+
+  <div class="icon-card" style="visibility:hidden;"></div>
+  <div class="icon-card" style="visibility:hidden;"></div>
+  <div class="icon-card" style="visibility:hidden;"></div>
+  <div class="icon-card" style="visibility:hidden;"></div>
+
+  <div class="section-title">Schnee</div>
+
+  <div class="icon-card">
+    <svg viewBox="0 0 80 80" fill="none" stroke="#000" stroke-width="2.5" stroke-linecap="round">
+      <path d="M14,36 Q14,24 26,24 Q29,16 42,16 Q56,16 56,28 Q64,28 64,36 Q64,44 56,44 L22,44 Q14,44 14,36 Z" fill="#000" stroke="none"/>
+      <g transform="translate(28,56)">
+        <line x1="0" y1="-5" x2="0" y2="5"/>
+        <line x1="-4.3" y1="-2.5" x2="4.3" y2="2.5"/>
+        <line x1="-4.3" y1="2.5" x2="4.3" y2="-2.5"/>
+      </g>
+      <g transform="translate(48,56)">
+        <line x1="0" y1="-5" x2="0" y2="5"/>
+        <line x1="-4.3" y1="-2.5" x2="4.3" y2="2.5"/>
+        <line x1="-4.3" y1="2.5" x2="4.3" y2="-2.5"/>
+      </g>
+    </svg>
+    <div class="label">Leichter Schnee</div>
+  </div>
+
+  <div class="icon-card">
+    <svg viewBox="0 0 80 80" fill="none" stroke="#000" stroke-width="2.5" stroke-linecap="round">
+      <path d="M14,34 Q14,22 26,22 Q29,14 42,14 Q56,14 56,26 Q64,26 64,34 Q64,42 56,42 L22,42 Q14,42 14,34 Z" fill="#000" stroke="none"/>
+      <g transform="translate(22,54)">
+        <line x1="0" y1="-5" x2="0" y2="5"/>
+        <line x1="-4.3" y1="-2.5" x2="4.3" y2="2.5"/>
+        <line x1="-4.3" y1="2.5" x2="4.3" y2="-2.5"/>
+      </g>
+      <g transform="translate(40,56)">
+        <line x1="0" y1="-5" x2="0" y2="5"/>
+        <line x1="-4.3" y1="-2.5" x2="4.3" y2="2.5"/>
+        <line x1="-4.3" y1="2.5" x2="4.3" y2="-2.5"/>
+      </g>
+      <g transform="translate(58,54)">
+        <line x1="0" y1="-5" x2="0" y2="5"/>
+        <line x1="-4.3" y1="-2.5" x2="4.3" y2="2.5"/>
+        <line x1="-4.3" y1="2.5" x2="4.3" y2="-2.5"/>
+      </g>
+    </svg>
+    <div class="label">Schnee</div>
+  </div>
+
+  <div class="icon-card">
+    <svg viewBox="0 0 80 80" fill="none" stroke="#000" stroke-width="3" stroke-linecap="round">
+      <path d="M14,32 Q14,20 26,20 Q29,12 42,12 Q56,12 56,24 Q64,24 64,32 Q64,40 56,40 L22,40 Q14,40 14,32 Z" fill="#000" stroke="none"/>
+      <g transform="translate(18,52)">
+        <line x1="0" y1="-5" x2="0" y2="5"/>
+        <line x1="-4.3" y1="-2.5" x2="4.3" y2="2.5"/>
+        <line x1="-4.3" y1="2.5" x2="4.3" y2="-2.5"/>
+      </g>
+      <g transform="translate(33,54)">
+        <line x1="0" y1="-5" x2="0" y2="5"/>
+        <line x1="-4.3" y1="-2.5" x2="4.3" y2="2.5"/>
+        <line x1="-4.3" y1="2.5" x2="4.3" y2="-2.5"/>
+      </g>
+      <g transform="translate(48,52)">
+        <line x1="0" y1="-5" x2="0" y2="5"/>
+        <line x1="-4.3" y1="-2.5" x2="4.3" y2="2.5"/>
+        <line x1="-4.3" y1="2.5" x2="4.3" y2="-2.5"/>
+      </g>
+      <g transform="translate(63,54)">
+        <line x1="0" y1="-5" x2="0" y2="5"/>
+        <line x1="-4.3" y1="-2.5" x2="4.3" y2="2.5"/>
+        <line x1="-4.3" y1="2.5" x2="4.3" y2="-2.5"/>
+      </g>
+    </svg>
+    <div class="label">Starker Schnee</div>
+  </div>
+
+  <div class="icon-card">
+    <svg viewBox="0 0 80 80" fill="none" stroke="#000" stroke-width="2.5" stroke-linecap="round">
+      <path d="M14,36 Q14,24 26,24 Q29,16 42,16 Q56,16 56,28 Q64,28 64,36 Q64,44 56,44 L22,44 Q14,44 14,36 Z" fill="#000" stroke="none"/>
+      <line x1="26" y1="50" x2="23" y2="62"/>
+      <line x1="40" y1="50" x2="37" y2="62"/>
+      <g transform="translate(54,58)">
+        <line x1="0" y1="-5" x2="0" y2="5"/>
+        <line x1="-4.3" y1="-2.5" x2="4.3" y2="2.5"/>
+        <line x1="-4.3" y1="2.5" x2="4.3" y2="-2.5"/>
+      </g>
+    </svg>
+    <div class="label">Schneeregen</div>
+  </div>
+
+  <div class="icon-card" style="visibility:hidden;"></div>
+  <div class="icon-card" style="visibility:hidden;"></div>
+  <div class="icon-card" style="visibility:hidden;"></div>
+  <div class="icon-card" style="visibility:hidden;"></div>
+  <div class="icon-card" style="visibility:hidden;"></div>
+
+  <div class="section-title">Gewitter & Wind</div>
+
+  <div class="icon-card">
+    <svg viewBox="0 0 80 80" fill="none" stroke="#000" stroke-width="2.5" stroke-linecap="round">
+      <path d="M14,34 Q14,22 26,22 Q29,14 42,14 Q56,14 56,26 Q64,26 64,34 Q64,42 56,42 L22,42 Q14,42 14,34 Z" fill="#000" stroke="none"/>
+      <polygon points="44,44 36,56 42,56 36,70 52,52 46,52 50,44" fill="#e8e4d9" stroke="none"/>
+      <polygon points="44,44 36,56 42,56 36,70 52,52 46,52 50,44" fill="none" stroke="#000" stroke-width="2"/>
+    </svg>
+    <div class="label">Gewitter</div>
+  </div>
+
+  <div class="icon-card">
+    <svg viewBox="0 0 80 80" fill="none" stroke="#000" stroke-width="2.5" stroke-linecap="round">
+      <path d="M14,32 Q14,20 26,20 Q29,12 42,12 Q56,12 56,24 Q64,24 64,32 Q64,40 56,40 L22,40 Q14,40 14,32 Z" fill="#000" stroke="none"/>
+      <polygon points="44,42 37,52 42,52 37,64 50,49 45,49 49,42" fill="#e8e4d9" stroke="none"/>
+      <polygon points="44,42 37,52 42,52 37,64 50,49 45,49 49,42" fill="none" stroke="#000" stroke-width="2"/>
+      <line x1="20" y1="46" x2="17" y2="58"/>
+      <line x1="60" y1="46" x2="57" y2="58"/>
+    </svg>
+    <div class="label">Gew.+Regen</div>
+  </div>
+
+  <div class="icon-card">
+    <svg viewBox="0 0 80 80" fill="none" stroke="#000" stroke-width="2.5" stroke-linecap="round">
+      <path d="M14,32 Q14,20 26,20 Q29,12 42,12 Q56,12 56,24 Q64,24 64,32 Q64,40 56,40 L22,40 Q14,40 14,32 Z" fill="#000" stroke="none"/>
+      <polygon points="44,42 37,52 42,52 37,64 50,49 45,49 49,42" fill="#e8e4d9" stroke="none"/>
+      <polygon points="44,42 37,52 42,52 37,64 50,49 45,49 49,42" fill="none" stroke="#000" stroke-width="2"/>
+      <circle cx="22" cy="52" r="3.5" fill="none" stroke="#000" stroke-width="2"/>
+      <circle cx="60" cy="50" r="3.5" fill="none" stroke="#000" stroke-width="2"/>
+      <circle cx="22" cy="64" r="3.5" fill="none" stroke="#000" stroke-width="2"/>
+    </svg>
+    <div class="label">Gew.+Hagel</div>
+  </div>
+
+  <div class="icon-card">
+    <svg viewBox="0 0 80 80" fill="none" stroke="#000" stroke-width="3" stroke-linecap="round">
+      <path d="M10,30 L42,30 Q52,30 52,22 Q52,14 42,14 Q38,14 38,20"/>
+      <path d="M10,44 L52,44 Q62,44 62,36 Q62,28 52,28"/>
+      <path d="M10,58 L38,58 Q48,58 48,50 Q48,42 38,42 Q34,42 34,46"/>
+    </svg>
+    <div class="label">Windig</div>
+  </div>
+
+  <div class="icon-card" style="visibility:hidden;"></div>
+  <div class="icon-card" style="visibility:hidden;"></div>
+  <div class="icon-card" style="visibility:hidden;"></div>
+  <div class="icon-card" style="visibility:hidden;"></div>
+  <div class="icon-card" style="visibility:hidden;"></div>
+
+</div>
+
+</body>
+</html>
