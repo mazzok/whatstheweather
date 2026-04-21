@@ -1,0 +1,14 @@
+[Unit]
+Description=E-Ink Weather Display Update
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=pi
+WorkingDirectory=/home/pi/whatstheweather
+ExecStart=/usr/bin/python3 -m src.main
+Environment=PYTHONPATH=/home/pi/whatstheweather
+
+[Install]
+WantedBy=multi-user.target

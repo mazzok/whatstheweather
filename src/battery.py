@@ -62,9 +62,12 @@ class BatteryMonitor:
             return {"date": str(date.today()), "percentage": self.percentage()}
 
     def _write_state(self, recharge_date: str, percentage: int) -> None:
-        self._recharge_path.write_text(
-            json.dumps({"date": recharge_date, "percentage": percentage})
-        )
+        try:
+            self._recharge_path.write_text(
+                json.dumps({"date": recharge_date, "percentage": percentage})
+            )
+        except OSError as e:
+            logger.warning("Could not write recharge state: %s", e)
 
     def get_off_grid_days(self) -> int:
         state = self._read_state()
