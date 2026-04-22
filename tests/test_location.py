@@ -14,10 +14,28 @@ def test_get_location_success():
     }
 
     with patch("src.location.requests.get", return_value=mock_response):
-        lat, lon = get_location()
+        lat, lon, city = get_location()
 
     assert lat == 48.2082
     assert lon == 16.3738
+    assert city == "Vienna"
+
+
+def test_get_location_missing_city():
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {
+        "status": "success",
+        "lat": 48.2082,
+        "lon": 16.3738,
+    }
+
+    with patch("src.location.requests.get", return_value=mock_response):
+        lat, lon, city = get_location()
+
+    assert lat == 48.2082
+    assert lon == 16.3738
+    assert city == ""
 
 
 def test_get_location_failure_returns_none():

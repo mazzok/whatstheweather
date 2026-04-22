@@ -8,7 +8,7 @@ TIMEOUT = 10
 logger = logging.getLogger(__name__)
 
 
-def get_location() -> tuple[float, float] | None:
+def get_location() -> tuple[float, float, str] | None:
     try:
         resp = requests.get(GEOLOCATION_URL, timeout=TIMEOUT)
         if resp.status_code != 200:
@@ -20,8 +20,9 @@ def get_location() -> tuple[float, float] | None:
             return None
         lat = data["lat"]
         lon = data["lon"]
-        logger.info("Location: %s (%.4f, %.4f)", data.get("city", "?"), lat, lon)
-        return lat, lon
+        city = data.get("city", "")
+        logger.info("Location: %s (%.4f, %.4f)", city or "?", lat, lon)
+        return lat, lon, city
     except Exception as e:
         logger.error("Geolocation error: %s", e)
         return None
