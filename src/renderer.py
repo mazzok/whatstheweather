@@ -99,13 +99,16 @@ def _draw_status_bar(
     bx = DISPLAY_WIDTH - 16 - 28 - 4  # leave room for terminal nub
     by = y + (STATUS_BAR_H - 14) // 2
 
-    # City name (left of battery)
+    # City name (left of battery, vertically centred to battery)
     if city:
         city_font = _load_font(False, 14)
         city_bbox = draw.textbbox((0, 0), city, font=city_font)
         city_w = city_bbox[2] - city_bbox[0]
+        city_h = city_bbox[3] - city_bbox[1]
         city_x = bx - 8 - city_w
-        draw.text((city_x, y + 6), city, fill=BLACK, font=city_font)
+        battery_center_y = by + 14 // 2
+        city_y = battery_center_y - city_h // 2
+        draw.text((city_x, city_y), city, fill=BLACK, font=city_font)
     bw, bh = 28, 14
     draw.rectangle([bx, by, bx + bw, by + bh], outline=BLACK, width=2)
     # Terminal nub (3×7 centred on right edge)
