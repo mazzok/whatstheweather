@@ -1,3 +1,4 @@
+import argparse
 import logging
 import subprocess
 import sys
@@ -68,7 +69,13 @@ def _charge_loop(config: dict, battery: BatteryMonitor) -> None:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="Weather display")
+    parser.add_argument("--debug", action="store_true", help="Enable debug mode (overrides config)")
+    args = parser.parse_args()
+
     config = load_config(CONFIG_PATH)
+    if args.debug:
+        config["debug"] = True
 
     level = logging.DEBUG if config["debug"] else logging.INFO
     logging.basicConfig(
