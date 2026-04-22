@@ -2,7 +2,7 @@
 import logging
 import requests
 
-GEOLOCATION_URL = "http://ip-api.com/json/?fields=status,lat,lon,city"
+GEOLOCATION_URL = "http://ip-api.com/json/?fields=status,lat,lon,city&lang=de"
 TIMEOUT = 10
 
 logger = logging.getLogger(__name__)

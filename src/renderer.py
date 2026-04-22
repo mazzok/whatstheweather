@@ -105,7 +105,7 @@ def _draw_status_bar(
         city_bbox = draw.textbbox((0, 0), city, font=city_font)
         city_w = city_bbox[2] - city_bbox[0]
         city_x = bx - 8 - city_w
-        draw.text((city_x, y + 6), city, fill=GRAY, font=city_font)
+        draw.text((city_x, y + 6), city, fill=BLACK, font=city_font)
     bw, bh = 28, 14
     draw.rectangle([bx, by, bx + bw, by + bh], outline=BLACK, width=2)
     # Terminal nub (3×7 centred on right edge)
@@ -197,7 +197,7 @@ def _draw_chart(
 ) -> None:
     """Draw the weekly temperature trend chart."""
     font_small = _load_font(False, 11)
-    font_avg = _load_font(True, 19)       # was 15
+    font_avg = _load_font(True, 22)       # was 15, then 19
     font_yaxis = _load_font(True, 19)     # was 15
 
     # Layout
