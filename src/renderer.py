@@ -352,10 +352,10 @@ def _draw_chart(
         avg_str = f"{int(round(p[3]))}°"
         avg_bbox = draw.textbbox((0, 0), avg_str, font=font_dot_temp)
         avg_w = avg_bbox[2] - avg_bbox[0]
-        draw.text((px - avg_w // 2, py + r + 2), avg_str, fill=dot_color, font=font_dot_temp)
+        draw.text((px - avg_w // 2, py + r + 6), avg_str, fill=dot_color, font=font_dot_temp)
 
     # --- X-axis labels ---
-    font_day = _load_font(True, 15)
+    font_day = _load_font(True, 20)
     font_minmax_axis = _load_font(False, 11)
     label_y = chart_bottom + 8
     for i, (d, p) in enumerate(zip(week_dates, points)):
