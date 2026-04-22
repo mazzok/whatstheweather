@@ -197,8 +197,8 @@ def _draw_chart(
 ) -> None:
     """Draw the weekly temperature trend chart."""
     font_small = _load_font(False, 11)
-    font_avg = _load_font(True, 15)
-    font_yaxis = _load_font(True, 15)
+    font_avg = _load_font(True, 19)       # was 15
+    font_yaxis = _load_font(True, 19)     # was 15
 
     # Layout
     chart_left = SIDE_PADDING + CHART_MARGIN_LEFT
@@ -335,7 +335,7 @@ def _draw_chart(
         is_today_flag = _is_today(i)
 
         dot_color = GRAY if is_past else BLACK
-        r = 9 if is_today_flag else 8
+        r = 13 if is_today_flag else 8    # was 9 if today, 8 otherwise
 
         # Draw circle (filled)
         draw.ellipse([px - r, py - r, px + r, py + r], fill=dot_color)
