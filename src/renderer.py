@@ -434,6 +434,6 @@ if __name__ == "__main__":
         week=_week, timestamp="2026-04-17T10:00:00",
     )
 
-    img = render_display(_weather, battery_pct=78, off_grid_days=2450)
+    img = render_display(_weather, battery_pct=78, off_grid_days=2450, city="Wien")
     img.save(args.preview)
     print(f"Preview saved to {args.preview}")

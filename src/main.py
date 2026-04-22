@@ -23,9 +23,11 @@ def run_once(config: dict, battery: BatteryMonitor) -> None:
     location = get_location()
     if location is None:
         logger.error("Could not determine location")
-        lat, lon = 48.2082, 16.3738  # Default: Vienna
+        lat, lon, city = 48.2082, 16.3738, config.get("city", "Wien")
     else:
-        lat, lon = location
+        lat, lon, city = location
+        # Config override for city name
+        city = config.get("city", city)
 
     # 2. Get weather data
     weather = get_weather(lat, lon)
@@ -35,14 +37,21 @@ def run_once(config: dict, battery: BatteryMonitor) -> None:
     off_grid_days = battery.get_off_grid_days()
 
     # 4. Render
-    image = render_display(weather, battery_pct=battery_pct, off_grid_days=off_grid_days)
+    image = render_display(weather, battery_pct=battery_pct, off_grid_days=off_grid_days, city=city)
 
-    # 5. Update display and save preview in debug mode
-    update_display_4gray(image)
+    # 5. Update display
     if config["debug"]:
         preview_path = "preview.png"
         image.save(preview_path)
-        logger.info("Debug mode: preview also saved to %s", preview_path)
+        logger.info("Preview saved to %s", preview_path)
+        answer = input("Display aktualisieren? [j/N] ").strip().lower()
+        if answer == "j":
+            update_display_4gray(image)
+            logger.info("Display updated")
+        else:
+            logger.info("Display update skipped")
+    else:
+        update_display_4gray(image)
 
 
 def _charge_loop(config: dict, battery: BatteryMonitor) -> None:
