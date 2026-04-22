@@ -327,7 +327,7 @@ def _draw_chart(
         draw.line(black_line, fill=BLACK, width=3)
 
     # --- Draw circles, mini icons, and avg temp below dots ---
-    font_dot_temp = _load_font(True, 13)
+    font_dot_temp = _load_font(True, 20)
     for i, p in enumerate(points):
         if p is None:
             continue
