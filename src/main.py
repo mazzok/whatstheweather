@@ -37,13 +37,12 @@ def run_once(config: dict, battery: BatteryMonitor) -> None:
     # 4. Render
     image = render_display(weather, battery_pct=battery_pct, off_grid_days=off_grid_days)
 
-    # 5. Update display or save preview
+    # 5. Update display and save preview in debug mode
+    update_display_4gray(image)
     if config["debug"]:
         preview_path = "preview.png"
         image.save(preview_path)
-        logger.info("Debug mode: preview saved to %s", preview_path)
-    else:
-        update_display_4gray(image)
+        logger.info("Debug mode: preview also saved to %s", preview_path)
 
 
 def _charge_loop(config: dict, battery: BatteryMonitor) -> None:
