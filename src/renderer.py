@@ -62,10 +62,10 @@ def render_display(
     draw = ImageDraw.Draw(img)
 
     y = 0
-    _draw_status_bar(draw, y, battery_pct, off_grid_days, error or weather.error, city)
+    _draw_status_bar(draw, y, battery_pct, off_grid_days, error or weather.error)
     y += STATUS_BAR_H
 
-    _draw_weather_section(draw, img, y, weather)
+    _draw_weather_section(draw, img, y, weather, city)
     y += WEATHER_SECTION_H
 
     _draw_chart(draw, img, y, weather)
@@ -83,7 +83,6 @@ def _draw_status_bar(
     battery_pct: float,
     off_grid_days: int,
     error: str,
-    city: str,
 ) -> None:
     font = _load_font(False, 14)
 
@@ -98,17 +97,6 @@ def _draw_status_bar(
     # Battery body: 28×14 at right edge
     bx = DISPLAY_WIDTH - 16 - 28 - 4  # leave room for terminal nub
     by = y + (STATUS_BAR_H - 14) // 2
-
-    # City name (left of battery, vertically centred to battery)
-    if city:
-        city_font = _load_font(False, 14)
-        city_bbox = draw.textbbox((0, 0), city, font=city_font)
-        city_w = city_bbox[2] - city_bbox[0]
-        city_h = city_bbox[3] - city_bbox[1]
-        city_x = bx - 8 - city_w
-        battery_center_y = by + 14 // 2
-        city_y = battery_center_y - city_h // 2
-        draw.text((city_x, city_y), city, fill=BLACK, font=city_font)
     bw, bh = 28, 14
     draw.rectangle([bx, by, bx + bw, by + bh], outline=BLACK, width=2)
     # Terminal nub (3×7 centred on right edge)
@@ -135,6 +123,7 @@ def _draw_weather_section(
     img: Image.Image,
     y: int,
     weather: WeatherData,
+    city: str = "",
 ) -> None:
     """Draw the 135px tall current-weather band."""
     section_bottom = y + WEATHER_SECTION_H
@@ -147,6 +136,7 @@ def _draw_weather_section(
     # Temperature number
     font_temp_big = _load_font(True, 56)
     font_temp_unit = _load_font(False, 24)
+    font_location = _load_font(True, 16)
     font_desc = _load_font(False, 20)
     font_minmax = _load_font(False, 16)
 
@@ -158,8 +148,16 @@ def _draw_weather_section(
     unit_x = bbox[2] + 4
     draw.text((unit_x, y + 20), "°C", fill=BLACK, font=font_temp_unit)
 
-    # Description
-    draw.text((temp_x, y + 72), weather.current_desc, fill=BLACK, font=font_desc)
+    # City + date, then description
+    location_line = ""
+    if city:
+        today_str = date.today().strftime("%d.%m.%Y")
+        location_line = f"{city}, {today_str}"
+    if location_line:
+        draw.text((temp_x, y + 72), location_line, fill=BLACK, font=font_location)
+        draw.text((temp_x, y + 92), weather.current_desc, fill=BLACK, font=font_desc)
+    else:
+        draw.text((temp_x, y + 72), weather.current_desc, fill=BLACK, font=font_desc)
 
     # Min/max to the right of the big temp
     minmax_x = unit_x + 40
@@ -328,7 +326,8 @@ def _draw_chart(
     if len(black_line) >= 2:
         draw.line(black_line, fill=BLACK, width=3)
 
-    # --- Draw circles and mini icons ---
+    # --- Draw circles, mini icons, and avg temp below dots ---
+    font_dot_temp = _load_font(True, 13)
     for i, p in enumerate(points):
         if p is None:
             continue
@@ -338,7 +337,7 @@ def _draw_chart(
         is_today_flag = _is_today(i)
 
         dot_color = GRAY if is_past else BLACK
-        r = 13 if is_today_flag else 8    # was 9 if today, 8 otherwise
+        r = 13 if is_today_flag else 8
 
         # Draw circle (filled)
         draw.ellipse([px - r, py - r, px + r, py + r], fill=dot_color)
@@ -349,62 +348,44 @@ def _draw_chart(
         icon_y = py - r - icon_sz - 2
         draw_icon(draw, p[4], icon_x, icon_y, icon_sz, dot_color)
 
+        # Avg temperature below the dot
+        avg_str = f"{int(round(p[3]))}°"
+        avg_bbox = draw.textbbox((0, 0), avg_str, font=font_dot_temp)
+        avg_w = avg_bbox[2] - avg_bbox[0]
+        draw.text((px - avg_w // 2, py + r + 2), avg_str, fill=dot_color, font=font_dot_temp)
+
     # --- X-axis labels ---
+    font_day = _load_font(True, 15)
+    font_minmax_axis = _load_font(False, 11)
     label_y = chart_bottom + 8
     for i, (d, p) in enumerate(zip(week_dates, points)):
+        px = day_x(i)
+        is_past = _is_past(i)
+        lbl_color = GRAY if is_past else BLACK
+        wd = WEEKDAYS[d.weekday()]
+
+        # Row 1: weekday name (centred, larger)
+        bbox = draw.textbbox((0, 0), wd, font=font_day)
+        lw = bbox[2] - bbox[0]
+        draw.text((px - lw // 2, label_y), wd, fill=lbl_color, font=font_day)
+
         if p is None:
-            # Draw date with no temp info
-            px = day_x(i)
-            is_past = _is_past(i)
-            lbl_color = GRAY if is_past else BLACK
-            wd = WEEKDAYS[d.weekday()]
-            bbox = draw.textbbox((0, 0), wd, font=font_small)
-            lw = bbox[2] - bbox[0]
-            draw.text((px - lw // 2, label_y), wd, fill=lbl_color, font=font_small)
             continue
 
         d_val, t_min, t_max, t_avg, icon = p
-        is_past = _is_past(i)
-        is_today_flag = _is_today(i)
-        lbl_color = GRAY if is_past else BLACK
 
-        px = day_x(i)
-        wd = WEEKDAYS[d.weekday()]
-
-        # Row 1: weekday name (centred)
-        bbox = draw.textbbox((0, 0), wd, font=font_small)
-        lw = bbox[2] - bbox[0]
-        draw.text((px - lw // 2, label_y), wd, fill=lbl_color, font=font_small)
-
-        # Row 2: min° avg° max° — small-bold-small
-        min_str = f"{int(round(t_min))}°"
-        avg_str = f"{int(round(t_avg))}°"
-        max_str = f"{int(round(t_max))}°"
-
-        min_bbox = draw.textbbox((0, 0), min_str, font=font_small)
-        avg_bbox = draw.textbbox((0, 0), avg_str, font=font_avg)
-        max_bbox = draw.textbbox((0, 0), max_str, font=font_small)
-
-        min_w = min_bbox[2] - min_bbox[0]
-        avg_w = avg_bbox[2] - avg_bbox[0]
-        max_w = max_bbox[2] - max_bbox[0]
-
-        gap = 2
-        total_w = min_w + gap + avg_w + gap + max_w
-        tx = px - total_w // 2
-
-        row2_y = label_y + 13
-        draw.text((tx, row2_y + 3), min_str, fill=lbl_color, font=font_small)
-        tx += min_w + gap
-        draw.text((tx, row2_y), avg_str, fill=lbl_color, font=font_avg)
-        tx += avg_w + gap
-        draw.text((tx, row2_y + 3), max_str, fill=lbl_color, font=font_small)
+        # Row 2: min° / max°
+        minmax_str = f"{int(round(t_min))}° / {int(round(t_max))}°"
+        mm_bbox = draw.textbbox((0, 0), minmax_str, font=font_minmax_axis)
+        mm_w = mm_bbox[2] - mm_bbox[0]
+        row2_y = label_y + 17
+        draw.text((px - mm_w // 2, row2_y), minmax_str, fill=lbl_color, font=font_minmax_axis)
 
         # Row 3: date dd.mm
         date_str = f"{d.day:02d}.{d.month:02d}"
         date_bbox = draw.textbbox((0, 0), date_str, font=font_small)
         dw = date_bbox[2] - date_bbox[0]
-        row3_y = row2_y + 18
+        row3_y = row2_y + 14
         draw.text((px - dw // 2, row3_y), date_str, fill=lbl_color, font=font_small)
 
 
