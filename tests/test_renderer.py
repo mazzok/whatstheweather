@@ -24,26 +24,31 @@ def _sample_weather() -> WeatherData:
 
 
 def test_render_display_returns_correct_size():
-    img = render_display(_sample_weather(), battery_pct=78, off_grid_days=2450)
+    img = render_display(_sample_weather(), battery_pct=78, off_grid_days=2450, city="Wien")
     assert img.size == (DISPLAY_WIDTH, DISPLAY_HEIGHT)
 
 
 def test_render_display_is_grayscale():
-    img = render_display(_sample_weather(), battery_pct=78, off_grid_days=2450)
+    img = render_display(_sample_weather(), battery_pct=78, off_grid_days=2450, city="Wien")
     assert img.mode == "L"
 
 
 def test_render_display_has_content():
-    img = render_display(_sample_weather(), battery_pct=78, off_grid_days=2450)
+    img = render_display(_sample_weather(), battery_pct=78, off_grid_days=2450, city="Wien")
     pixels = list(img.getdata())
     white_count = sum(1 for p in pixels if p > 250)
     assert white_count < len(pixels) * 0.95
 
 
 def test_render_display_preview_saves_png(tmp_path):
-    img = render_display(_sample_weather(), battery_pct=78, off_grid_days=2450)
+    img = render_display(_sample_weather(), battery_pct=78, off_grid_days=2450, city="Wien")
     path = tmp_path / "preview.png"
     img.save(str(path))
     assert path.exists()
     loaded = Image.open(str(path))
     assert loaded.size == (DISPLAY_WIDTH, DISPLAY_HEIGHT)
+
+
+def test_render_display_no_city():
+    img = render_display(_sample_weather(), battery_pct=78, off_grid_days=2450)
+    assert img.size == (DISPLAY_WIDTH, DISPLAY_HEIGHT)

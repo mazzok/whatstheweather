@@ -53,6 +53,7 @@ def render_display(
     battery_pct: float,
     off_grid_days: int,
     error: str = "",
+    city: str = "",
 ) -> Image.Image:
     """Compose and return the full 800x480 grayscale display image."""
     # Use 245 (slightly off-white, matching e-ink paper tone) so the background
@@ -61,7 +62,7 @@ def render_display(
     draw = ImageDraw.Draw(img)
 
     y = 0
-    _draw_status_bar(draw, y, battery_pct, off_grid_days, error or weather.error)
+    _draw_status_bar(draw, y, battery_pct, off_grid_days, error or weather.error, city)
     y += STATUS_BAR_H
 
     _draw_weather_section(draw, img, y, weather)
@@ -82,6 +83,7 @@ def _draw_status_bar(
     battery_pct: float,
     off_grid_days: int,
     error: str,
+    city: str,
 ) -> None:
     font = _load_font(False, 14)
 
@@ -96,6 +98,14 @@ def _draw_status_bar(
     # Battery body: 28×14 at right edge
     bx = DISPLAY_WIDTH - 16 - 28 - 4  # leave room for terminal nub
     by = y + (STATUS_BAR_H - 14) // 2
+
+    # City name (left of battery)
+    if city:
+        city_font = _load_font(False, 14)
+        city_bbox = draw.textbbox((0, 0), city, font=city_font)
+        city_w = city_bbox[2] - city_bbox[0]
+        city_x = bx - 8 - city_w
+        draw.text((city_x, y + 6), city, fill=GRAY, font=city_font)
     bw, bh = 28, 14
     draw.rectangle([bx, by, bx + bw, by + bh], outline=BLACK, width=2)
     # Terminal nub (3×7 centred on right edge)
