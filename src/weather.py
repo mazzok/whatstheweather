@@ -183,18 +183,24 @@ def find_nearest_station(lat: float, lon: float, stations: list[dict]) -> dict |
 # API calls
 # ---------------------------------------------------------------------------
 
-def fetch_station_metadata() -> list[dict]:
-    """Fetch TAWES station list from GeoSphere metadata endpoint."""
-    url = f"{BASE_URL}/v1/station/current/tawes-v1-10min/metadata"
+def fetch_station_metadata(dataset: str = "tawes-v1-10min") -> list[dict]:
+    """Fetch station list from a GeoSphere metadata endpoint.
+
+    dataset can be 'tawes-v1-10min' (current) or 'klima-v2-1d' (historical).
+    """
+    if dataset == "klima-v2-1d":
+        url = f"{BASE_URL}/v1/station/historical/{dataset}/metadata"
+    else:
+        url = f"{BASE_URL}/v1/station/current/{dataset}/metadata"
     try:
         resp = requests.get(url, timeout=TIMEOUT)
         if resp.status_code != 200:
-            logger.error("Station metadata HTTP %d", resp.status_code)
+            logger.error("Station metadata (%s) HTTP %d", dataset, resp.status_code)
             return []
         data = resp.json()
         return data.get("stations", [])
     except Exception as exc:
-        logger.error("fetch_station_metadata error: %s", exc)
+        logger.error("fetch_station_metadata (%s) error: %s", dataset, exc)
         return []
 
 
@@ -440,10 +446,14 @@ def get_weather(lat: float, lon: float) -> WeatherData:
         past_start = monday
         past_end = today - timedelta(days=1)
 
-        if past_start <= past_end and nearest:
+        if past_start <= past_end:
             missing_past = [d for d in _daterange(past_start, past_end) if d not in forecast_dates]
             if missing_past:
-                historical = fetch_historical(nearest["id"], missing_past[0], missing_past[-1])
+                # Historical stations are a different network than TAWES
+                hist_stations = fetch_station_metadata("klima-v2-1d")
+                hist_nearest = find_nearest_station(lat, lon, hist_stations)
+                hist_station_id = hist_nearest["id"] if hist_nearest else (nearest["id"] if nearest else None)
+                historical = fetch_historical(hist_station_id, missing_past[0], missing_past[-1]) if hist_station_id else []
                 hist_by_date = {d.date: d for d in historical}
                 for d in missing_past:
                     if d in hist_by_date:
