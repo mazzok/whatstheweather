@@ -96,16 +96,8 @@ def main() -> None:
             logger.info("Next update in %d seconds", config["interval"])
             time.sleep(config["interval"])
     else:
-        # One update
         run_once(config, battery)
-
-        if battery.is_charging():
-            # On power: stay alive, systemd timer handles next update
-            logger.info("Power connected — staying alive for timer")
-        else:
-            # On battery: shut down to conserve power
-            logger.info("On battery — entering deep sleep...")
-            subprocess.run(["sudo", "shutdown", "-h", "now"])
+        logger.info("Update complete — staying alive for timer")
 
 
 if __name__ == "__main__":
