@@ -36,6 +36,20 @@ SY_MAP = {
     32: "thunderstorm_hail",
 }
 
+WMO_CODE_MAP = {
+    0: "clear", 1: "clear", 2: "partly_cloudy", 3: "overcast",
+    45: "fog", 48: "fog",
+    51: "drizzle", 53: "drizzle", 55: "drizzle",
+    56: "freezing_rain", 57: "freezing_rain",
+    61: "rain", 63: "rain", 65: "heavy_rain",
+    66: "freezing_rain", 67: "freezing_rain",
+    71: "light_snow", 73: "snow", 75: "heavy_snow",
+    77: "snow",
+    80: "rain_shower", 81: "rain_shower", 82: "heavy_rain",
+    85: "light_snow", 86: "heavy_snow",
+    95: "thunderstorm", 96: "thunderstorm_hail", 99: "thunderstorm_hail",
+}
+
 COMPASS = ["N", "NO", "O", "SO", "S", "SW", "W", "NW"]
 
 WEATHER_DESCRIPTIONS = {
@@ -279,6 +293,42 @@ def _derive_icon_from_historical(rr: float, bewm: float, so_h: float, nebel: flo
     return "clear"
 
 
+def fetch_openmeteo_daily(lat: float, lon: float) -> list[DayForecast]:
+    """Fetch 7-day daily forecast from Open-Meteo as gap-filler."""
+    url = (
+        f"https://api.open-meteo.com/v1/forecast"
+        f"?latitude={lat}&longitude={lon}"
+        f"&daily=temperature_2m_max,temperature_2m_min,temperature_2m_mean,weather_code"
+        f"&timezone=Europe/Vienna"
+    )
+    try:
+        resp = requests.get(url, timeout=TIMEOUT)
+        if resp.status_code != 200:
+            logger.error("Open-Meteo HTTP %d", resp.status_code)
+            return []
+        data = resp.json()
+        daily = data.get("daily", {})
+        dates = daily.get("time", [])
+        t_max = daily.get("temperature_2m_max", [])
+        t_min = daily.get("temperature_2m_min", [])
+        t_mean = daily.get("temperature_2m_mean", [])
+        codes = daily.get("weather_code", [])
+
+        result: list[DayForecast] = []
+        for i, ds in enumerate(dates):
+            d = date.fromisoformat(ds)
+            code = codes[i] if i < len(codes) else 0
+            icon = WMO_CODE_MAP.get(code, "overcast")
+            avg = t_mean[i] if i < len(t_mean) and t_mean[i] is not None else 0.0
+            mx = t_max[i] if i < len(t_max) and t_max[i] is not None else avg
+            mn = t_min[i] if i < len(t_min) and t_min[i] is not None else avg
+            result.append(DayForecast(date=d, temp_min=mn, temp_max=mx, temp_avg=avg, icon=icon))
+        return result
+    except Exception as exc:
+        logger.error("fetch_openmeteo_daily error: %s", exc)
+        return []
+
+
 def fetch_forecast(lat: float, lon: float) -> dict | None:
     """Fetch NWP forecast for (lat, lon). Returns raw JSON dict or None."""
     url = (
@@ -459,6 +509,19 @@ def get_weather(lat: float, lon: float) -> WeatherData:
                     if d in hist_by_date:
                         day_forecasts.append(hist_by_date[d])
                 day_forecasts.sort(key=lambda f: f.date)
+
+        # Fill remaining gaps (e.g. Sunday) from Open-Meteo 7-day forecast
+        sunday = monday + timedelta(days=6)
+        week_dates = set(_daterange(monday, sunday))
+        covered = {d.date for d in day_forecasts}
+        still_missing = week_dates - covered
+        if still_missing:
+            openmeteo = fetch_openmeteo_daily(lat, lon)
+            om_by_date = {d.date: d for d in openmeteo}
+            for d in sorted(still_missing):
+                if d in om_by_date:
+                    day_forecasts.append(om_by_date[d])
+            day_forecasts.sort(key=lambda f: f.date)
 
         # Today's aggregated data
         today_forecast = next((f for f in day_forecasts if f.date == today), None)
