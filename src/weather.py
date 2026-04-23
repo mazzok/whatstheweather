@@ -4,7 +4,7 @@ import logging
 import math
 from collections import Counter
 from dataclasses import dataclass, field
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import requests
@@ -160,6 +160,11 @@ def aggregate_daily_forecast(
     return result
 
 
+def _daterange(start: date, end: date) -> list[date]:
+    """Return a list of dates from start to end (inclusive)."""
+    return [start + timedelta(days=i) for i in range((end - start).days + 1)]
+
+
 def find_nearest_station(lat: float, lon: float, stations: list[dict]) -> dict | None:
     """Return the active station closest to (lat, lon), or None if none available."""
     active = [s for s in stations if s.get("is_active", False)]
@@ -191,6 +196,81 @@ def fetch_station_metadata() -> list[dict]:
     except Exception as exc:
         logger.error("fetch_station_metadata error: %s", exc)
         return []
+
+
+def fetch_historical(station_id: str, start: date, end: date) -> list[DayForecast]:
+    """Fetch historical daily data from klima-v2-1d for a station and date range.
+
+    Returns a list of DayForecast entries for each day in the range.
+    """
+    if start > end:
+        return []
+    url = (
+        f"{BASE_URL}/v1/station/historical/klima-v2-1d"
+        f"?parameters=tl_mittel,tlmax,tlmin,rr,bewm_mittel,so_h,nebel,gew"
+        f"&start={start.isoformat()}T00:00:00"
+        f"&end={end.isoformat()}T00:00:00"
+        f"&station_ids={station_id}"
+    )
+    try:
+        resp = requests.get(url, timeout=TIMEOUT)
+        if resp.status_code != 200:
+            logger.error("Historical HTTP %d", resp.status_code)
+            return []
+        data = resp.json()
+        timestamps = data.get("timestamps", [])
+        props = data["features"][0]["properties"]["parameters"]
+        tl_mittel = props["tl_mittel"]["data"]
+        tlmax = props["tlmax"]["data"]
+        tlmin = props["tlmin"]["data"]
+        rr = props.get("rr", {}).get("data", [0.0] * len(timestamps))
+        bewm = props.get("bewm_mittel", {}).get("data", [50.0] * len(timestamps))
+        so_h = props.get("so_h", {}).get("data", [0.0] * len(timestamps))
+        nebel = props.get("nebel", {}).get("data", [0] * len(timestamps))
+        gew = props.get("gew", {}).get("data", [0] * len(timestamps))
+
+        result: list[DayForecast] = []
+        for i, ts_str in enumerate(timestamps):
+            d = datetime.fromisoformat(ts_str).date()
+            icon = _derive_icon_from_historical(
+                rr[i] if i < len(rr) else 0.0,
+                bewm[i] if i < len(bewm) else 50.0,
+                so_h[i] if i < len(so_h) else 0.0,
+                nebel[i] if i < len(nebel) else 0,
+                gew[i] if i < len(gew) else 0,
+            )
+            t_avg = tl_mittel[i] if i < len(tl_mittel) and tl_mittel[i] is not None else 0.0
+            t_max = tlmax[i] if i < len(tlmax) and tlmax[i] is not None else t_avg
+            t_min = tlmin[i] if i < len(tlmin) and tlmin[i] is not None else t_avg
+            result.append(DayForecast(date=d, temp_min=t_min, temp_max=t_max, temp_avg=t_avg, icon=icon))
+        return result
+    except Exception as exc:
+        logger.error("fetch_historical error: %s", exc)
+        return []
+
+
+def _derive_icon_from_historical(rr: float, bewm: float, so_h: float, nebel: float, gew: float) -> str:
+    """Derive a weather icon name from historical daily measurements."""
+    if gew and gew > 0:
+        if rr and rr > 1.0:
+            return "thunderstorm_rain"
+        return "thunderstorm"
+    if nebel and nebel > 0:
+        return "fog"
+    if rr is not None and rr > 10.0:
+        return "heavy_rain"
+    if rr is not None and rr > 2.0:
+        return "rain"
+    if rr is not None and rr > 0.5:
+        return "drizzle"
+    if bewm is not None:
+        if bewm > 80:
+            return "overcast"
+        if bewm > 60:
+            return "mostly_cloudy"
+        if bewm > 30:
+            return "partly_cloudy"
+    return "clear"
 
 
 def fetch_forecast(lat: float, lon: float) -> dict | None:
@@ -353,8 +433,25 @@ def get_weather(lat: float, lon: float) -> WeatherData:
 
         day_forecasts = aggregate_daily_forecast(timestamps, t2m_data, sy_data)
 
+        # Fill in past days from historical data
+        today = datetime.now(timezone.utc).date()
+        monday = today - timedelta(days=today.weekday())
+        forecast_dates = {d.date for d in day_forecasts}
+        past_start = monday
+        past_end = today - timedelta(days=1)
+
+        if past_start <= past_end and nearest:
+            missing_past = [d for d in _daterange(past_start, past_end) if d not in forecast_dates]
+            if missing_past:
+                historical = fetch_historical(nearest["id"], missing_past[0], missing_past[-1])
+                hist_by_date = {d.date: d for d in historical}
+                for d in missing_past:
+                    if d in hist_by_date:
+                        day_forecasts.append(hist_by_date[d])
+                day_forecasts.sort(key=lambda f: f.date)
+
         # Today's aggregated data
-        today_forecast = day_forecasts[0] if day_forecasts else None
+        today_forecast = next((f for f in day_forecasts if f.date == today), None)
 
         # Current conditions: prefer TAWES, fall back to first forecast point
         if current_obs:
