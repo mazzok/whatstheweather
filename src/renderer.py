@@ -63,10 +63,10 @@ def render_display(
     draw = ImageDraw.Draw(img)
 
     y = 0
-    _draw_status_bar(draw, y, battery_pct, off_grid_days, error or weather.error, city)
+    _draw_status_bar(draw, y, battery_pct, off_grid_days, error or weather.error)
     y += STATUS_BAR_H
 
-    _draw_weather_section(draw, img, y, weather)
+    _draw_weather_section(draw, img, y, weather, city)
     y += WEATHER_SECTION_H
 
     _draw_chart(draw, img, y, weather)
@@ -84,7 +84,6 @@ def _draw_status_bar(
     battery_pct: float,
     off_grid_days: int,
     error: str,
-    city: str = "",
 ) -> None:
     font = _load_font(False, 14)
 
@@ -99,18 +98,6 @@ def _draw_status_bar(
     # Battery body: 28×14 at right edge
     bx = DISPLAY_WIDTH - 16 - 28 - 4  # leave room for terminal nub
     by = y + (STATUS_BAR_H - 14) // 2
-
-    # City name (left of battery)
-    if city:
-        city_font = _load_font(True, 14)
-        city_bbox = draw.textbbox((0, 0), city, font=city_font)
-        city_w = city_bbox[2] - city_bbox[0]
-        city_h = city_bbox[3] - city_bbox[1]
-        city_x = bx - 8 - city_w
-        battery_center_y = by + 14 // 2
-        city_y = battery_center_y - city_h // 2
-        draw.text((city_x, city_y), city, fill=BLACK, font=city_font)
-
     bw, bh = 28, 14
     draw.rectangle([bx, by, bx + bw, by + bh], outline=BLACK, width=2)
     # Terminal nub (3×7 centred on right edge)
@@ -137,6 +124,7 @@ def _draw_weather_section(
     img: Image.Image,
     y: int,
     weather: WeatherData,
+    city: str = "",
 ) -> None:
     """Draw the weather band: temp+icons left, date+wind right."""
     section_bottom = y + WEATHER_SECTION_H
@@ -146,6 +134,7 @@ def _draw_weather_section(
     font_minmax = _load_font(True, 16)
     font_label = _load_font(True, 14)
     font_wind = _load_font(True, 20)
+    font_city = _load_font(True, 20)
     font_date_day = _load_font(True, 64)
     font_date_month = _load_font(True, 16)
 
@@ -194,12 +183,23 @@ def _draw_weather_section(
     today = date.today()
     right_center_x = divider_x + (DISPLAY_WIDTH - divider_x) // 2
 
-    # Day number (large)
+    # City name above day number
     day_str = str(today.day)
     day_bbox = draw.textbbox((0, 0), day_str, font=font_date_day)
     day_w = day_bbox[2] - day_bbox[0]
     day_h = day_bbox[3] - day_bbox[1]
-    day_y = y + (WEATHER_SECTION_H - day_h - 24) // 2
+
+    if city:
+        city_bbox = draw.textbbox((0, 0), city, font=font_city)
+        city_w = city_bbox[2] - city_bbox[0]
+        city_h = city_bbox[3] - city_bbox[1]
+        total_h = city_h + 8 + day_h + 16 + 16  # city + gap + day + gap + month
+        start_y = y + (WEATHER_SECTION_H - total_h) // 2
+        draw.text((right_center_x - city_w // 2, start_y), city, fill=BLACK, font=font_city)
+        day_y = start_y + city_h + 8
+    else:
+        day_y = y + (WEATHER_SECTION_H - day_h - 24) // 2
+
     draw.text((right_center_x - day_w // 2, day_y), day_str, fill=BLACK, font=font_date_day)
 
     # Month + year
