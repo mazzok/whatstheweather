@@ -173,24 +173,19 @@ def _draw_weather_section(
     draw_icon(draw, "windy", wind_start_x, y + 10, wind_icon_sz, BLACK)
     draw.text((wind_start_x + wind_icon_sz + 8, y + 14), wind_str, fill=BLACK, font=font_wind)
 
-    # Weather icon (current) + label underneath
-    icon_sz = 48
-    icon_row_y = y + 90
-    icon1_x = SIDE_PADDING + 20
-    draw_icon(draw, weather.current_icon, icon1_x, icon_row_y, icon_sz, BLACK)
-    # Label under icon
+    # Weather icon + label (row 1)
+    icon_sz = 36
+    icon1_x = SIDE_PADDING + 10
+    icon1_y = y + 82
+    draw_icon(draw, weather.current_icon, icon1_x, icon1_y, icon_sz, BLACK)
     desc_label = weather.current_desc
-    lbl_bbox = draw.textbbox((0, 0), desc_label, font=font_label)
-    lbl_w = lbl_bbox[2] - lbl_bbox[0]
-    draw.text((icon1_x + icon_sz // 2 - lbl_w // 2, icon_row_y + icon_sz + 4), desc_label, fill=BLACK, font=font_label)
+    draw.text((icon1_x + icon_sz + 8, icon1_y + 8), desc_label, fill=BLACK, font=font_label)
 
-    # Rain icon (same size) + percentage underneath
-    icon2_x = icon1_x + icon_sz + 30
-    draw_icon(draw, "rain", icon2_x, icon_row_y, icon_sz, BLACK)
+    # Rain icon + percentage (row 2, below)
+    icon2_y = icon1_y + icon_sz + 6
+    draw_icon(draw, "rain", icon1_x, icon2_y, icon_sz, BLACK)
     rain_str = f"{int(round(weather.precip_probability))}%"
-    rain_bbox = draw.textbbox((0, 0), rain_str, font=font_label)
-    rain_w = rain_bbox[2] - rain_bbox[0]
-    draw.text((icon2_x + icon_sz // 2 - rain_w // 2, icon_row_y + icon_sz + 4), rain_str, fill=BLACK, font=font_label)
+    draw.text((icon1_x + icon_sz + 8, icon2_y + 8), rain_str, fill=BLACK, font=font_label)
 
     # --- VERTICAL DIVIDER ---
     draw.line([(divider_x, y + 12), (divider_x, section_bottom - 12)], fill=BLACK, width=2)
