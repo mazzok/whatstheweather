@@ -20,7 +20,7 @@ DISPLAY_WIDTH = 800
 DISPLAY_HEIGHT = 480
 
 STATUS_BAR_H = 30
-WEATHER_SECTION_H = 135
+WEATHER_SECTION_H = 175
 CHART_MARGIN_LEFT = 40
 CHART_MARGIN_RIGHT = 42
 SIDE_PADDING = 30
@@ -63,10 +63,10 @@ def render_display(
     draw = ImageDraw.Draw(img)
 
     y = 0
-    _draw_status_bar(draw, y, battery_pct, off_grid_days, error or weather.error)
+    _draw_status_bar(draw, y, battery_pct, off_grid_days, error or weather.error, city)
     y += STATUS_BAR_H
 
-    _draw_weather_section(draw, img, y, weather, city)
+    _draw_weather_section(draw, img, y, weather)
     y += WEATHER_SECTION_H
 
     _draw_chart(draw, img, y, weather)
@@ -84,6 +84,7 @@ def _draw_status_bar(
     battery_pct: float,
     off_grid_days: int,
     error: str,
+    city: str = "",
 ) -> None:
     font = _load_font(False, 14)
 
@@ -98,6 +99,18 @@ def _draw_status_bar(
     # Battery body: 28×14 at right edge
     bx = DISPLAY_WIDTH - 16 - 28 - 4  # leave room for terminal nub
     by = y + (STATUS_BAR_H - 14) // 2
+
+    # City name (left of battery)
+    if city:
+        city_font = _load_font(True, 14)
+        city_bbox = draw.textbbox((0, 0), city, font=city_font)
+        city_w = city_bbox[2] - city_bbox[0]
+        city_h = city_bbox[3] - city_bbox[1]
+        city_x = bx - 8 - city_w
+        battery_center_y = by + 14 // 2
+        city_y = battery_center_y - city_h // 2
+        draw.text((city_x, city_y), city, fill=BLACK, font=city_font)
+
     bw, bh = 28, 14
     draw.rectangle([bx, by, bx + bw, by + bh], outline=BLACK, width=2)
     # Terminal nub (3×7 centred on right edge)
@@ -124,67 +137,112 @@ def _draw_weather_section(
     img: Image.Image,
     y: int,
     weather: WeatherData,
-    city: str = "",
 ) -> None:
-    """Draw the 135px tall current-weather band."""
+    """Draw the weather band with all data left, calendar right."""
+    import calendar as cal_mod
     section_bottom = y + WEATHER_SECTION_H
 
-    # --- LEFT: weather icon (90x90) + temp + desc + minmax ---
+    # --- LEFT: weather icon + temp + desc + minmax + wind + precip ---
     icon_x = SIDE_PADDING
     icon_y = y + (WEATHER_SECTION_H - 90) // 2
     draw_icon(draw, weather.current_icon, icon_x, icon_y, 90, BLACK)
 
-    # Temperature number
-    font_temp_big = _load_font(True, 56)
-    font_temp_unit = _load_font(False, 24)
-    font_location = _load_font(True, 16)
-    font_desc = _load_font(False, 20)
-    font_minmax = _load_font(False, 16)
+    font_temp_big = _load_font(True, 48)
+    font_temp_unit = _load_font(False, 20)
+    font_desc = _load_font(False, 17)
+    font_minmax = _load_font(False, 14)
+    font_detail = _load_font(True, 14)
 
     temp_x = icon_x + 90 + 16
     temp_str = f"{int(round(weather.current_temp))}"
-    draw.text((temp_x, y + 10), temp_str, fill=BLACK, font=font_temp_big)
-    # Measure width to place °C right after
-    bbox = draw.textbbox((temp_x, y + 10), temp_str, font=font_temp_big)
+    draw.text((temp_x, y + 12), temp_str, fill=BLACK, font=font_temp_big)
+    bbox = draw.textbbox((temp_x, y + 12), temp_str, font=font_temp_big)
     unit_x = bbox[2] + 4
-    draw.text((unit_x, y + 20), "°C", fill=BLACK, font=font_temp_unit)
+    draw.text((unit_x, y + 22), "°C", fill=BLACK, font=font_temp_unit)
 
-    # City + date, then description
-    location_line = ""
-    if city:
-        today_str = date.today().strftime("%d.%m.%Y")
-        location_line = f"{city}, {today_str}"
-    if location_line:
-        draw.text((temp_x, y + 72), location_line, fill=BLACK, font=font_location)
-        draw.text((temp_x, y + 92), weather.current_desc, fill=BLACK, font=font_desc)
-    else:
-        draw.text((temp_x, y + 72), weather.current_desc, fill=BLACK, font=font_desc)
+    # Min/max next to temp
+    minmax_x = unit_x + 10
+    draw.text((minmax_x, y + 16), f"\u2191{int(round(weather.temp_max_today))}°", fill=BLACK, font=font_minmax)
+    draw.text((minmax_x, y + 34), f"\u2193{int(round(weather.temp_min_today))}°", fill=BLACK, font=font_minmax)
 
-    # Min/max to the right of the big temp
-    minmax_x = unit_x + 40
-    draw.text((minmax_x, y + 14), f"{int(round(weather.temp_max_today))}°C", fill=BLACK, font=font_minmax)
-    draw.text((minmax_x, y + 36), f"{int(round(weather.temp_min_today))}°C", fill=BLACK, font=font_minmax)
+    # Description
+    draw.text((temp_x, y + 68), weather.current_desc, fill=BLACK, font=font_desc)
+
+    # Wind + precip
+    wind_str = f"{int(round(weather.wind_speed))} km/h {weather.wind_direction}"
+    rain_str = f"Regen {int(round(weather.precip_probability))}%"
+    draw.text((temp_x, y + 92), wind_str, fill=BLACK, font=font_detail)
+    draw.text((temp_x, y + 112), rain_str, fill=BLACK, font=font_detail)
 
     # --- VERTICAL DIVIDER ---
-    divider_x = DISPLAY_WIDTH // 2 + 20
+    divider_x = DISPLAY_WIDTH // 2 + 60
     draw.line([(divider_x, y + 12), (divider_x, section_bottom - 12)], fill=BLACK, width=2)
 
-    # --- RIGHT: wind + precip ---
-    right_x = divider_x + 24
-    info_y_wind = y + 20
-    info_y_rain = y + 75
+    # --- RIGHT: Mini calendar ---
+    today = date.today()
+    cal_x = divider_x + 20
+    cal_area_w = DISPLAY_WIDTH - cal_x - SIDE_PADDING
+    cal_area_h = WEATHER_SECTION_H - 24
 
-    # Wind icon (32x32)
-    draw_icon(draw, "windy", right_x, info_y_wind, 32, BLACK)
-    font_info = _load_font(True, 22)
-    draw.text((right_x + 42, info_y_wind + 4), f"{int(round(weather.wind_speed))} km/h | {weather.wind_direction}", fill=BLACK, font=font_info)
+    font_month = _load_font(True, 14)
+    font_cal_header = _load_font(True, 10)
+    font_cal_day = _load_font(False, 11)
+    font_cal_today = _load_font(True, 11)
 
-    # Rain/precip icon (32x32)
-    draw_icon(draw, "rain", right_x, info_y_rain, 32, BLACK)
-    draw.text((right_x + 42, info_y_rain + 4), f"{int(round(weather.precip_probability))} %", fill=BLACK, font=font_info)
+    # Month name
+    month_names = ["", "Jänner", "Februar", "März", "April", "Mai", "Juni",
+                   "Juli", "August", "September", "Oktober", "November", "Dezember"]
+    month_str = f"{month_names[today.month]} {today.year}"
+    month_bbox = draw.textbbox((0, 0), month_str, font=font_month)
+    month_w = month_bbox[2] - month_bbox[0]
+    cal_center_x = cal_x + cal_area_w // 2
+    draw.text((cal_center_x - month_w // 2, y + 14), month_str, fill=BLACK, font=font_month)
+
+    # Day headers
+    day_headers = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
+    cell_w = 28
+    cell_h = 20
+    grid_w = cell_w * 7
+    grid_x = cal_center_x - grid_w // 2
+    header_y = y + 34
+
+    for i, dh in enumerate(day_headers):
+        hbbox = draw.textbbox((0, 0), dh, font=font_cal_header)
+        hw = hbbox[2] - hbbox[0]
+        draw.text((grid_x + i * cell_w + (cell_w - hw) // 2, header_y), dh, fill=GRAY, font=font_cal_header)
+
+    # Calendar days
+    first_weekday, num_days = cal_mod.monthrange(today.year, today.month)
+    row_y = header_y + 18
+    col = first_weekday  # 0=Monday
+
+    for day in range(1, num_days + 1):
+        cx = grid_x + col * cell_w
+        cy = row_y
+        day_str = str(day)
+
+        if day == today.day:
+            # Draw filled background for today
+            dbbox = draw.textbbox((0, 0), day_str, font=font_cal_today)
+            dw = dbbox[2] - dbbox[0]
+            dh = dbbox[3] - dbbox[1]
+            pad = 3
+            rect_x = cx + (cell_w - dw) // 2 - pad
+            rect_y = cy - pad + 1
+            draw.rectangle([rect_x, rect_y, rect_x + dw + pad * 2, rect_y + dh + pad * 2], fill=BLACK)
+            draw.text((cx + (cell_w - dw) // 2, cy), day_str, fill=WHITE, font=font_cal_today)
+        else:
+            dbbox = draw.textbbox((0, 0), day_str, font=font_cal_day)
+            dw = dbbox[2] - dbbox[0]
+            draw.text((cx + (cell_w - dw) // 2, cy), day_str, fill=BLACK, font=font_cal_day)
+
+        col += 1
+        if col > 6:
+            col = 0
+            row_y += cell_h
 
     # Bottom border of section
-    draw.line([(0, section_bottom - 1), (DISPLAY_WIDTH, section_bottom - 1)], fill=BLACK, width=3)
+    draw.line([(0, section_bottom - 1), (DISPLAY_WIDTH, section_bottom - 1)], fill=BLACK, width=2)
 
 
 # ---------------------------------------------------------------------------
@@ -208,7 +266,7 @@ def _draw_chart(
     chart_width = chart_right - chart_left
 
     # X-axis label area height at bottom
-    label_area_h = 52
+    label_area_h = 40
     chart_top = y_start + 14           # small top padding
     chart_bottom = DISPLAY_HEIGHT - label_area_h - 4
     chart_height = chart_bottom - chart_top
@@ -305,8 +363,8 @@ def _draw_chart(
             avg_positions.append((i, px, py, _is_past(i)))
 
     # Draw connecting lines segment by segment, stopping short of each icon
-    icon_sz = 47
-    icon_margin = 4  # gap between line end and icon edge
+    icon_sz = 38
+    icon_margin = 8  # gap between line end and icon edge
 
     def _shorten_segment(x1: int, y1: int, x2: int, y2: int, r: int) -> tuple[int, int, int, int] | None:
         """Shorten a line segment so it stops r pixels from each endpoint."""
@@ -356,9 +414,11 @@ def _draw_chart(
         dot_color = GRAY if is_past else BLACK
 
         # Weather icon centered on data point
+        # Today: filled, future: outline only, past: filled gray
+        is_future = not is_past and not is_today_flag
         icon_x = px - icon_sz // 2
         icon_y = py - icon_sz // 2
-        draw_icon(draw, p[4], icon_x, icon_y, icon_sz, dot_color)
+        draw_icon(draw, p[4], icon_x, icon_y, icon_sz, dot_color, outline_only=is_future)
 
         # Avg temperature below the icon
         avg_str = f"{int(round(p[3]))}°"
@@ -392,13 +452,6 @@ def _draw_chart(
         mm_w = mm_bbox[2] - mm_bbox[0]
         row2_y = label_y + 17
         draw.text((px - mm_w // 2, row2_y), minmax_str, fill=lbl_color, font=font_minmax_axis)
-
-        # Row 3: date dd.mm
-        date_str = f"{d.day:02d}.{d.month:02d}"
-        date_bbox = draw.textbbox((0, 0), date_str, font=font_small)
-        dw = date_bbox[2] - date_bbox[0]
-        row3_y = row2_y + 14
-        draw.text((px - dw // 2, row3_y), date_str, fill=lbl_color, font=font_small)
 
 
 # ---------------------------------------------------------------------------
