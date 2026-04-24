@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import math
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -303,28 +304,44 @@ def _draw_chart(
             py = temp_to_y(p[3])
             avg_positions.append((i, px, py, _is_past(i)))
 
-    # Draw connecting lines in two passes:
-    # 1) Gray line from first valid past point through last past point AND to today
-    # 2) Black line from today onwards
+    # Draw connecting lines segment by segment, stopping short of each icon
+    icon_sz = 47
+    icon_margin = 4  # gap between line end and icon edge
+
+    def _shorten_segment(x1: int, y1: int, x2: int, y2: int, r: int) -> tuple[int, int, int, int] | None:
+        """Shorten a line segment so it stops r pixels from each endpoint."""
+        dx = x2 - x1
+        dy = y2 - y1
+        length = math.sqrt(dx * dx + dy * dy)
+        if length < 2 * r:
+            return None  # too short to draw
+        ux, uy = dx / length, dy / length
+        return (int(x1 + ux * r), int(y1 + uy * r), int(x2 - ux * r), int(y2 - uy * r))
 
     past_pts = [(px, py) for i, px, py, is_p in avg_positions if is_p]
     today_pt = next(((px, py) for i, px, py, _ in avg_positions if _is_today(i)), None)
     future_pts = [(px, py) for i, px, py, _ in avg_positions if not _is_past(i) and not _is_today(i)]
 
-    # Gray segment: past + bridge to today
+    half_icon = icon_sz // 2 + icon_margin
+
+    # Gray segments: past + bridge to today
     gray_line = past_pts[:]
     if today_pt:
         gray_line.append(today_pt)
-    if len(gray_line) >= 2:
-        draw.line(gray_line, fill=GRAY, width=2)
+    for j in range(len(gray_line) - 1):
+        seg = _shorten_segment(gray_line[j][0], gray_line[j][1], gray_line[j + 1][0], gray_line[j + 1][1], half_icon)
+        if seg:
+            draw.line([seg[0], seg[1], seg[2], seg[3]], fill=GRAY, width=2)
 
-    # Black segment: today + future
+    # Black segments: today + future
     black_line = []
     if today_pt:
         black_line.append(today_pt)
     black_line.extend(future_pts)
-    if len(black_line) >= 2:
-        draw.line(black_line, fill=BLACK, width=3)
+    for j in range(len(black_line) - 1):
+        seg = _shorten_segment(black_line[j][0], black_line[j][1], black_line[j + 1][0], black_line[j + 1][1], half_icon)
+        if seg:
+            draw.line([seg[0], seg[1], seg[2], seg[3]], fill=BLACK, width=3)
 
     # --- Draw circles, mini icons, and avg temp below dots ---
     font_dot_temp = _load_font(True, 20)
@@ -338,13 +355,12 @@ def _draw_chart(
 
         dot_color = GRAY if is_past else BLACK
 
-        # Weather icon centered on data point (replaces dot)
-        icon_sz = 36
+        # Weather icon centered on data point
         icon_x = px - icon_sz // 2
         icon_y = py - icon_sz // 2
         draw_icon(draw, p[4], icon_x, icon_y, icon_sz, dot_color)
 
-        # Avg temperature below the dot
+        # Avg temperature below the icon
         avg_str = f"{int(round(p[3]))}°"
         avg_bbox = draw.textbbox((0, 0), avg_str, font=font_dot_temp)
         avg_w = avg_bbox[2] - avg_bbox[0]
