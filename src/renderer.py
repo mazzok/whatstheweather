@@ -138,108 +138,82 @@ def _draw_weather_section(
     y: int,
     weather: WeatherData,
 ) -> None:
-    """Draw the weather band with all data left, calendar right."""
-    import calendar as cal_mod
+    """Draw the weather band: temp+icons left, date+wind right."""
     section_bottom = y + WEATHER_SECTION_H
 
-    # --- LEFT: weather icon + temp + desc + minmax + wind + precip ---
-    icon_x = SIDE_PADDING
-    icon_y = y + (WEATHER_SECTION_H - 90) // 2
-    draw_icon(draw, weather.current_icon, icon_x, icon_y, 90, BLACK)
+    font_temp_huge = _load_font(True, 72)
+    font_temp_unit = _load_font(False, 28)
+    font_minmax = _load_font(True, 16)
+    font_label = _load_font(True, 14)
+    font_wind = _load_font(True, 16)
+    font_date_day = _load_font(True, 64)
+    font_date_month = _load_font(True, 16)
 
-    font_temp_big = _load_font(True, 48)
-    font_temp_unit = _load_font(False, 20)
-    font_desc = _load_font(False, 17)
-    font_minmax = _load_font(False, 14)
-    font_detail = _load_font(True, 14)
-
-    temp_x = icon_x + 90 + 16
+    # --- LEFT: Temperature (dominant) ---
+    temp_x = SIDE_PADDING
     temp_str = f"{int(round(weather.current_temp))}"
-    draw.text((temp_x, y + 12), temp_str, fill=BLACK, font=font_temp_big)
-    bbox = draw.textbbox((temp_x, y + 12), temp_str, font=font_temp_big)
+    draw.text((temp_x, y + 8), temp_str, fill=BLACK, font=font_temp_huge)
+    bbox = draw.textbbox((temp_x, y + 8), temp_str, font=font_temp_huge)
     unit_x = bbox[2] + 4
-    draw.text((unit_x, y + 22), "°C", fill=BLACK, font=font_temp_unit)
+    draw.text((unit_x, y + 14), "°C", fill=BLACK, font=font_temp_unit)
 
-    # Min/max next to temp
-    minmax_x = unit_x + 10
-    draw.text((minmax_x, y + 16), f"\u2191{int(round(weather.temp_max_today))}°", fill=BLACK, font=font_minmax)
-    draw.text((minmax_x, y + 34), f"\u2193{int(round(weather.temp_min_today))}°", fill=BLACK, font=font_minmax)
+    # Min/max right of °C, top-aligned
+    minmax_x = unit_x + 50
+    draw.text((minmax_x, y + 14), f"\u2191 {int(round(weather.temp_max_today))}°", fill=BLACK, font=font_minmax)
+    draw.text((minmax_x, y + 34), f"\u2193 {int(round(weather.temp_min_today))}°", fill=BLACK, font=font_minmax)
 
-    # Description
-    draw.text((temp_x, y + 68), weather.current_desc, fill=BLACK, font=font_desc)
-
-    # Wind + precip
+    # Wind top-right of left area, right-aligned
+    divider_x = DISPLAY_WIDTH // 2 + 60
     wind_str = f"{int(round(weather.wind_speed))} km/h {weather.wind_direction}"
-    rain_str = f"Regen {int(round(weather.precip_probability))}%"
-    draw.text((temp_x, y + 92), wind_str, fill=BLACK, font=font_detail)
-    draw.text((temp_x, y + 112), rain_str, fill=BLACK, font=font_detail)
+    wind_bbox = draw.textbbox((0, 0), wind_str, font=font_wind)
+    wind_w = wind_bbox[2] - wind_bbox[0]
+    wind_icon_sz = 36
+    wind_total = wind_icon_sz + 8 + wind_w
+    wind_start_x = divider_x - 16 - wind_total
+    draw_icon(draw, "windy", wind_start_x, y + 10, wind_icon_sz, BLACK)
+    draw.text((wind_start_x + wind_icon_sz + 8, y + 14), wind_str, fill=BLACK, font=font_wind)
+
+    # Weather icon (current) + label underneath
+    icon_sz = 48
+    icon_row_y = y + 90
+    icon1_x = SIDE_PADDING + 20
+    draw_icon(draw, weather.current_icon, icon1_x, icon_row_y, icon_sz, BLACK)
+    # Label under icon
+    desc_label = weather.current_desc
+    lbl_bbox = draw.textbbox((0, 0), desc_label, font=font_label)
+    lbl_w = lbl_bbox[2] - lbl_bbox[0]
+    draw.text((icon1_x + icon_sz // 2 - lbl_w // 2, icon_row_y + icon_sz + 4), desc_label, fill=BLACK, font=font_label)
+
+    # Rain icon (same size) + percentage underneath
+    icon2_x = icon1_x + icon_sz + 30
+    draw_icon(draw, "rain", icon2_x, icon_row_y, icon_sz, BLACK)
+    rain_str = f"{int(round(weather.precip_probability))}%"
+    rain_bbox = draw.textbbox((0, 0), rain_str, font=font_label)
+    rain_w = rain_bbox[2] - rain_bbox[0]
+    draw.text((icon2_x + icon_sz // 2 - rain_w // 2, icon_row_y + icon_sz + 4), rain_str, fill=BLACK, font=font_label)
 
     # --- VERTICAL DIVIDER ---
-    divider_x = DISPLAY_WIDTH // 2 + 60
     draw.line([(divider_x, y + 12), (divider_x, section_bottom - 12)], fill=BLACK, width=2)
 
-    # --- RIGHT: Mini calendar ---
+    # --- RIGHT: Date ---
     today = date.today()
-    cal_x = divider_x + 20
-    cal_area_w = DISPLAY_WIDTH - cal_x - SIDE_PADDING
-    cal_area_h = WEATHER_SECTION_H - 24
+    right_center_x = divider_x + (DISPLAY_WIDTH - divider_x) // 2
 
-    font_month = _load_font(True, 14)
-    font_cal_header = _load_font(True, 10)
-    font_cal_day = _load_font(False, 11)
-    font_cal_today = _load_font(True, 11)
+    # Day number (large)
+    day_str = str(today.day)
+    day_bbox = draw.textbbox((0, 0), day_str, font=font_date_day)
+    day_w = day_bbox[2] - day_bbox[0]
+    day_h = day_bbox[3] - day_bbox[1]
+    day_y = y + (WEATHER_SECTION_H - day_h - 24) // 2
+    draw.text((right_center_x - day_w // 2, day_y), day_str, fill=BLACK, font=font_date_day)
 
-    # Month name
+    # Month + year
     month_names = ["", "Jänner", "Februar", "März", "April", "Mai", "Juni",
                    "Juli", "August", "September", "Oktober", "November", "Dezember"]
     month_str = f"{month_names[today.month]} {today.year}"
-    month_bbox = draw.textbbox((0, 0), month_str, font=font_month)
+    month_bbox = draw.textbbox((0, 0), month_str, font=font_date_month)
     month_w = month_bbox[2] - month_bbox[0]
-    cal_center_x = cal_x + cal_area_w // 2
-    draw.text((cal_center_x - month_w // 2, y + 14), month_str, fill=BLACK, font=font_month)
-
-    # Day headers
-    day_headers = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
-    cell_w = 28
-    cell_h = 20
-    grid_w = cell_w * 7
-    grid_x = cal_center_x - grid_w // 2
-    header_y = y + 34
-
-    for i, dh in enumerate(day_headers):
-        hbbox = draw.textbbox((0, 0), dh, font=font_cal_header)
-        hw = hbbox[2] - hbbox[0]
-        draw.text((grid_x + i * cell_w + (cell_w - hw) // 2, header_y), dh, fill=GRAY, font=font_cal_header)
-
-    # Calendar days
-    first_weekday, num_days = cal_mod.monthrange(today.year, today.month)
-    row_y = header_y + 18
-    col = first_weekday  # 0=Monday
-
-    for day in range(1, num_days + 1):
-        cx = grid_x + col * cell_w
-        cy = row_y
-        day_str = str(day)
-
-        if day == today.day:
-            # Draw filled background for today
-            dbbox = draw.textbbox((0, 0), day_str, font=font_cal_today)
-            dw = dbbox[2] - dbbox[0]
-            dh = dbbox[3] - dbbox[1]
-            pad = 3
-            rect_x = cx + (cell_w - dw) // 2 - pad
-            rect_y = cy - pad + 1
-            draw.rectangle([rect_x, rect_y, rect_x + dw + pad * 2, rect_y + dh + pad * 2], fill=BLACK)
-            draw.text((cx + (cell_w - dw) // 2, cy), day_str, fill=WHITE, font=font_cal_today)
-        else:
-            dbbox = draw.textbbox((0, 0), day_str, font=font_cal_day)
-            dw = dbbox[2] - dbbox[0]
-            draw.text((cx + (cell_w - dw) // 2, cy), day_str, fill=BLACK, font=font_cal_day)
-
-        col += 1
-        if col > 6:
-            col = 0
-            row_y += cell_h
+    draw.text((right_center_x - month_w // 2, day_y + day_h + 8), month_str, fill=BLACK, font=font_date_month)
 
     # Bottom border of section
     draw.line([(0, section_bottom - 1), (DISPLAY_WIDTH, section_bottom - 1)], fill=BLACK, width=2)

@@ -22,7 +22,7 @@ def _s(size: int, val: float) -> float:
 def _cloud(draw, x, y, size, color, cy_offset=0, outline_only=False):
     """Draw a standard cloud shape."""
     s = lambda v: _s(size, v)
-    cx, cy = x + s(40), y + s(38 + cy_offset)
+    cx, cy = x + s(40), y + s(32 + cy_offset)
     r1 = s(22)
     r2 = s(14)
     w = max(1, int(s(2.5)))
@@ -58,7 +58,7 @@ def _snowflake(draw, cx, cy, r, color, width):
 
 def _draw_clear(draw, x, y, size, color, outline_only=False):
     s = lambda v: _s(size, v)
-    cx, cy = x + s(40), y + s(40)
+    cx, cy = x + s(40), y + s(34)
     r = s(12)
     w = max(1, int(s(3)))
     if outline_only:
@@ -70,7 +70,7 @@ def _draw_clear(draw, x, y, size, color, outline_only=False):
 
 def _draw_partly_cloudy(draw, x, y, size, color, outline_only=False):
     s = lambda v: _s(size, v)
-    sx, sy = x + s(28), y + s(26)
+    sx, sy = x + s(28), y + s(20)
     r = s(10)
     w = max(1, int(s(2.5)))
     if outline_only:
@@ -78,20 +78,20 @@ def _draw_partly_cloudy(draw, x, y, size, color, outline_only=False):
     else:
         draw.ellipse([sx - r, sy - r, sx + r, sy + r], outline=color, width=w)
     _sun_rays(draw, sx, sy, r + s(3), r + s(10), color, w)
-    _cloud(draw, x + s(8), y + s(8), int(size * 0.75), color, cy_offset=4, outline_only=outline_only)
+    _cloud(draw, x + s(8), y + s(6), int(size * 0.75), color, cy_offset=0, outline_only=outline_only)
 
 
 def _draw_mostly_cloudy(draw, x, y, size, color, outline_only=False):
     s = lambda v: _s(size, v)
     w = max(1, int(s(2.5)))
-    sx, sy = x + s(22), y + s(20)
+    sx, sy = x + s(22), y + s(14)
     r = s(6)
     _sun_rays(draw, sx, sy, r + s(2), r + s(8), color, w)
-    _cloud(draw, x, y + s(4), size, color, outline_only=outline_only)
+    _cloud(draw, x, y, size, color, cy_offset=0, outline_only=outline_only)
 
 
 def _draw_overcast(draw, x, y, size, color, outline_only=False):
-    _cloud(draw, x, y, size, color, outline_only=outline_only)
+    _cloud(draw, x, y, size, color, cy_offset=0, outline_only=outline_only)
 
 
 def _draw_fog(draw, x, y, size, color, outline_only=False):
