@@ -337,22 +337,18 @@ def _draw_chart(
         is_today_flag = _is_today(i)
 
         dot_color = GRAY if is_past else BLACK
-        r = 13 if is_today_flag else 8
 
-        # Draw circle (filled)
-        draw.ellipse([px - r, py - r, px + r, py + r], fill=dot_color)
-
-        # Small weather icon (24x24) above the dot
-        icon_sz = 24
+        # Weather icon centered on data point (replaces dot)
+        icon_sz = 36
         icon_x = px - icon_sz // 2
-        icon_y = py - r - icon_sz - 2
+        icon_y = py - icon_sz // 2
         draw_icon(draw, p[4], icon_x, icon_y, icon_sz, dot_color)
 
         # Avg temperature below the dot
         avg_str = f"{int(round(p[3]))}°"
         avg_bbox = draw.textbbox((0, 0), avg_str, font=font_dot_temp)
         avg_w = avg_bbox[2] - avg_bbox[0]
-        draw.text((px - avg_w // 2, py + r + 6), avg_str, fill=dot_color, font=font_dot_temp)
+        draw.text((px - avg_w // 2, py + icon_sz // 2 + 4), avg_str, fill=dot_color, font=font_dot_temp)
 
     # --- X-axis labels ---
     font_day = _load_font(True, 20)
