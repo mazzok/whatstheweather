@@ -97,7 +97,12 @@ def main() -> None:
             time.sleep(config["interval"])
     else:
         run_once(config, battery)
-        logger.info("Update complete — staying alive for timer")
+
+        if battery.is_charging():
+            logger.info("Power connected — staying alive for timer")
+        else:
+            logger.info("On battery — entering deep sleep...")
+            subprocess.run(["sudo", "shutdown", "-h", "now"])
 
 
 if __name__ == "__main__":

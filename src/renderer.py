@@ -200,15 +200,17 @@ def _draw_weather_section(
     else:
         day_y = y + (WEATHER_SECTION_H - day_h - 24) // 2
 
-    draw.text((right_center_x - day_w // 2, day_y), day_str, fill=BLACK, font=font_date_day)
+    # Day + month on same line, same size: "24.04"
+    date_str = f"{today.day:02d}.{today.month:02d}"
+    date_bbox = draw.textbbox((0, 0), date_str, font=font_date_day)
+    date_w = date_bbox[2] - date_bbox[0]
+    draw.text((right_center_x - date_w // 2, day_y), date_str, fill=BLACK, font=font_date_day)
 
-    # Month + year
-    month_names = ["", "Jänner", "Februar", "März", "April", "Mai", "Juni",
-                   "Juli", "August", "September", "Oktober", "November", "Dezember"]
-    month_str = f"{month_names[today.month]} {today.year}"
-    month_bbox = draw.textbbox((0, 0), month_str, font=font_date_month)
-    month_w = month_bbox[2] - month_bbox[0]
-    draw.text((right_center_x - month_w // 2, day_y + day_h + 16), month_str, fill=BLACK, font=font_date_month)
+    # Year below
+    year_str = str(today.year)
+    year_bbox = draw.textbbox((0, 0), year_str, font=font_date_month)
+    year_w = year_bbox[2] - year_bbox[0]
+    draw.text((right_center_x - year_w // 2, day_y + day_h + 22), year_str, fill=BLACK, font=font_date_month)
 
     # Bottom border of section
     draw.line([(0, section_bottom - 1), (DISPLAY_WIDTH, section_bottom - 1)], fill=BLACK, width=2)
