@@ -20,7 +20,7 @@ DISPLAY_WIDTH = 800
 DISPLAY_HEIGHT = 480
 
 STATUS_BAR_H = 30
-WEATHER_SECTION_H = 175
+WEATHER_SECTION_H = 185
 CHART_MARGIN_LEFT = 40
 CHART_MARGIN_RIGHT = 42
 SIDE_PADDING = 30
@@ -145,7 +145,7 @@ def _draw_weather_section(
     font_temp_unit = _load_font(False, 28)
     font_minmax = _load_font(True, 16)
     font_label = _load_font(True, 14)
-    font_wind = _load_font(True, 16)
+    font_wind = _load_font(True, 20)
     font_date_day = _load_font(True, 64)
     font_date_month = _load_font(True, 16)
 
@@ -167,22 +167,22 @@ def _draw_weather_section(
     wind_str = f"{int(round(weather.wind_speed))} km/h {weather.wind_direction}"
     wind_bbox = draw.textbbox((0, 0), wind_str, font=font_wind)
     wind_w = wind_bbox[2] - wind_bbox[0]
-    wind_icon_sz = 36
+    wind_icon_sz = 48
     wind_total = wind_icon_sz + 8 + wind_w
     wind_start_x = divider_x - 16 - wind_total
-    draw_icon(draw, "windy", wind_start_x, y + 10, wind_icon_sz, BLACK)
-    draw.text((wind_start_x + wind_icon_sz + 8, y + 14), wind_str, fill=BLACK, font=font_wind)
+    draw_icon(draw, "windy", wind_start_x, y + 4, wind_icon_sz, BLACK)
+    draw.text((wind_start_x + wind_icon_sz + 8, y + 16), wind_str, fill=BLACK, font=font_wind)
 
     # Weather icon + label (row 1)
-    icon_sz = 36
+    icon_sz = 48
     icon1_x = SIDE_PADDING + 10
     icon1_y = y + 82
     draw_icon(draw, weather.current_icon, icon1_x, icon1_y, icon_sz, BLACK)
     desc_label = weather.current_desc
-    draw.text((icon1_x + icon_sz + 8, icon1_y + 8), desc_label, fill=BLACK, font=font_label)
+    draw.text((icon1_x + icon_sz + 8, icon1_y + 14), desc_label, fill=BLACK, font=font_label)
 
     # Rain icon + percentage (row 2, below)
-    icon2_y = icon1_y + icon_sz + 6
+    icon2_y = icon1_y + icon_sz + 2
     draw_icon(draw, "rain", icon1_x, icon2_y, icon_sz, BLACK)
     rain_str = f"{int(round(weather.precip_probability))}%"
     draw.text((icon1_x + icon_sz + 8, icon2_y + 8), rain_str, fill=BLACK, font=font_label)
