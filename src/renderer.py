@@ -33,8 +33,8 @@ WEEKDAYS = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
 
 # Font paths relative to project root
 _PROJECT_ROOT = Path(__file__).parent.parent
-_FONT_REGULAR = str(_PROJECT_ROOT / "fonts" / "DejaVuSansMono.ttf")
-_FONT_BOLD = str(_PROJECT_ROOT / "fonts" / "DejaVuSansMono-Bold.ttf")
+_FONT_REGULAR = str(_PROJECT_ROOT / "fonts" / "Inter-Regular.ttf")
+_FONT_BOLD = str(_PROJECT_ROOT / "fonts" / "Inter-Bold.ttf")
 
 
 def _load_font(bold: bool, size: int) -> ImageFont.FreeTypeFont:
@@ -176,7 +176,7 @@ def _draw_weather_section(
     # Weather icon + label (row 1)
     icon_sz = 48
     icon1_x = SIDE_PADDING + 10
-    icon1_y = y + 82
+    icon1_y = y + 92
     draw_icon(draw, weather.current_icon, icon1_x, icon1_y, icon_sz, BLACK)
     desc_label = weather.current_desc
     draw.text((icon1_x + icon_sz + 8, icon1_y + 14), desc_label, fill=BLACK, font=font_label)
@@ -208,7 +208,7 @@ def _draw_weather_section(
     month_str = f"{month_names[today.month]} {today.year}"
     month_bbox = draw.textbbox((0, 0), month_str, font=font_date_month)
     month_w = month_bbox[2] - month_bbox[0]
-    draw.text((right_center_x - month_w // 2, day_y + day_h + 8), month_str, fill=BLACK, font=font_date_month)
+    draw.text((right_center_x - month_w // 2, day_y + day_h + 16), month_str, fill=BLACK, font=font_date_month)
 
     # Bottom border of section
     draw.line([(0, section_bottom - 1), (DISPLAY_WIDTH, section_bottom - 1)], fill=BLACK, width=2)
@@ -419,7 +419,7 @@ def _draw_chart(
         minmax_str = f"{int(round(t_min))}° / {int(round(t_max))}°"
         mm_bbox = draw.textbbox((0, 0), minmax_str, font=font_minmax_axis)
         mm_w = mm_bbox[2] - mm_bbox[0]
-        row2_y = label_y + 17
+        row2_y = label_y + 22
         draw.text((px - mm_w // 2, row2_y), minmax_str, fill=lbl_color, font=font_minmax_axis)
 
 
