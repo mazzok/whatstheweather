@@ -71,7 +71,7 @@ def render_display(
 
     _draw_chart(draw, img, y, weather)
 
-    return img
+    return img.rotate(180)
 
 
 # ---------------------------------------------------------------------------
@@ -140,8 +140,8 @@ def _draw_weather_section(
     font_label = _load_font(True, 14)
     font_wind = _load_font(True, 20)
     font_city = _load_font(True, 20)
-    font_date_day = _load_font(True, 64)
-    font_date_month = _load_font(True, 16)
+    font_date_day = _load_font(True, 52)
+    font_date_sub = _load_font(True, 16)
 
     # --- LEFT: Temperature (dominant) ---
     temp_x = SIDE_PADDING
@@ -188,34 +188,31 @@ def _draw_weather_section(
     today = date.today()
     right_center_x = divider_x + (DISPLAY_WIDTH - divider_x) // 2
 
-    # City name above day number
-    day_str = str(today.day)
-    day_bbox = draw.textbbox((0, 0), day_str, font=font_date_day)
-    day_w = day_bbox[2] - day_bbox[0]
-    day_h = day_bbox[3] - day_bbox[1]
+    # City name above date line
+    weekday_abbr = WEEKDAYS[today.weekday()]
+    date_str = f"{weekday_abbr}, {today.day:02d}.{today.month:02d}"
+    date_bbox = draw.textbbox((0, 0), date_str, font=font_date_day)
+    date_w = date_bbox[2] - date_bbox[0]
+    date_h = date_bbox[3] - date_bbox[1]
 
     if city:
         city_bbox = draw.textbbox((0, 0), city, font=font_city)
         city_w = city_bbox[2] - city_bbox[0]
         city_h = city_bbox[3] - city_bbox[1]
-        total_h = city_h + 8 + day_h + 16 + 16  # city + gap + day + gap + month
+        total_h = city_h + 8 + date_h + 8 + 16  # city + gap + date + gap + year
         start_y = y + (WEATHER_SECTION_H - total_h) // 2
         draw.text((right_center_x - city_w // 2, start_y), city, fill=BLACK, font=font_city)
         day_y = start_y + city_h + 8
     else:
-        day_y = y + (WEATHER_SECTION_H - day_h - 24) // 2
+        day_y = y + (WEATHER_SECTION_H - date_h - 24) // 2
 
-    # Day + month on same line, same size: "24.04"
-    date_str = f"{today.day:02d}.{today.month:02d}"
-    date_bbox = draw.textbbox((0, 0), date_str, font=font_date_day)
-    date_w = date_bbox[2] - date_bbox[0]
     draw.text((right_center_x - date_w // 2, day_y), date_str, fill=BLACK, font=font_date_day)
 
     # Year below
     year_str = str(today.year)
-    year_bbox = draw.textbbox((0, 0), year_str, font=font_date_month)
+    year_bbox = draw.textbbox((0, 0), year_str, font=font_date_sub)
     year_w = year_bbox[2] - year_bbox[0]
-    draw.text((right_center_x - year_w // 2, day_y + day_h + 22), year_str, fill=BLACK, font=font_date_month)
+    draw.text((right_center_x - year_w // 2, day_y + date_h + 12), year_str, fill=BLACK, font=font_date_sub)
 
     # Bottom border of section
     draw.line([(0, section_bottom - 1), (DISPLAY_WIDTH, section_bottom - 1)], fill=BLACK, width=2)
