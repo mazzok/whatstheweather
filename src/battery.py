@@ -52,7 +52,12 @@ class BatteryMonitor:
         return max(0, min(100, pct))
 
     def is_charging(self) -> bool:
-        return self.current() > 0
+        # Current-based detection doesn't work on this HAT (charge circuit
+        # bypasses the INA219 shunt).  Fall back to voltage increase: if the
+        # current percentage is higher than the last saved percentage the
+        # battery must be charging.
+        state = self._read_state()
+        return self.percentage() > state["percentage"]
 
     def _read_state(self) -> dict:
         try:
@@ -73,7 +78,7 @@ class BatteryMonitor:
         state = self._read_state()
         current_pct = self.percentage()
 
-        if self.is_charging() and current_pct > state["percentage"]:
+        if current_pct > state["percentage"]:
             # Charge increase detected — reset counter
             today_str = str(date.today())
             self._write_state(today_str, current_pct)
