@@ -94,11 +94,16 @@ def _draw_status_bar(
         text = f"Off grid: {off_grid_days} days"
     draw.text((16, y + 6), text, fill=BLACK, font=font)
 
-    # Right: battery icon
+    # Right: battery percentage + icon
     # Battery body: 28×14 at right edge
     bx = DISPLAY_WIDTH - 16 - 28 - 4  # leave room for terminal nub
     by = y + (STATUS_BAR_H - 14) // 2
     bw, bh = 28, 14
+    # Percentage text left of battery icon
+    pct_text = f"{int(battery_pct)}%"
+    pct_bbox = font.getbbox(pct_text)
+    pct_w = pct_bbox[2] - pct_bbox[0]
+    draw.text((bx - pct_w - 6, y + 6), pct_text, fill=BLACK, font=font)
     draw.rectangle([bx, by, bx + bw, by + bh], outline=BLACK, width=2)
     # Terminal nub (3×7 centred on right edge)
     nub_w, nub_h = 3, 7
