@@ -1,90 +1,100 @@
-"""rtc.py — DS3231 RTC alarm for scheduled wake from halt."""
+"""rtc.py — DS3231 RTC alarm for scheduled wake from halt.
+
+Uses the kernel RTC interface (/dev/rtc0) instead of raw I2C,
+since the i2c-rtc overlay claims the device exclusively.
+"""
 
 from __future__ import annotations
 
+import ctypes
+import fcntl
 import logging
+import struct
 from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
-I2C_ADDRESS = 0x68
+# ioctl numbers from <linux/rtc.h>
+RTC_RD_TIME = 0x80247009
+RTC_ALM_SET = 0x40247007
+RTC_ALM_READ = 0x80247008
+RTC_AIE_ON = 0x40047001
+RTC_AIE_OFF = 0x40047002
 
-# DS3231 registers
-REG_SECONDS = 0x00
-REG_ALARM1_SECONDS = 0x07
-REG_CONTROL = 0x0E
-REG_STATUS = 0x0F
-
-
-def _bcd_to_int(bcd: int) -> int:
-    return (bcd >> 4) * 10 + (bcd & 0x0F)
+# struct rtc_time layout: 9 ints (sec, min, hour, mday, mon, year, wday, yday, isdst)
+RTC_TIME_FMT = "9i"
 
 
-def _int_to_bcd(val: int) -> int:
-    return ((val // 10) << 4) | (val % 10)
+def _pack_rtc_time(dt: datetime) -> bytes:
+    return struct.pack(
+        RTC_TIME_FMT,
+        dt.second, dt.minute, dt.hour,
+        dt.day, dt.month - 1, dt.year - 1900,
+        dt.weekday(), 0, -1,
+    )
+
+
+def _unpack_rtc_time(buf: bytes) -> datetime:
+    s, m, h, d, mo, y, _wday, _yday, _isdst = struct.unpack(RTC_TIME_FMT, buf)
+    return datetime(y + 1900, mo + 1, d, h, m, s)
 
 
 class DS3231:
-    def __init__(self) -> None:
+    def __init__(self, device: str = "/dev/rtc0") -> None:
+        self._device = device
+        self._available = True
         try:
-            from smbus2 import SMBus
-            self._bus = SMBus(1)
+            with open(device, "rb") as f:
+                buf = bytearray(struct.calcsize(RTC_TIME_FMT))
+                fcntl.ioctl(f.fileno(), RTC_RD_TIME, buf)
+            logger.debug("DS3231 available at %s", device)
         except Exception as e:
             logger.warning("DS3231 not available: %s", e)
-            self._bus = None
+            self._available = False
 
-    def _read(self, reg: int) -> int:
-        return self._bus.read_byte_data(I2C_ADDRESS, reg)
-
-    def _write(self, reg: int, val: int) -> None:
-        self._bus.write_byte_data(I2C_ADDRESS, reg, val)
-
-    def now(self) -> datetime:
+    def now(self) -> datetime | None:
         """Read current time from DS3231."""
-        s = _bcd_to_int(self._read(REG_SECONDS) & 0x7F)
-        m = _bcd_to_int(self._read(0x01))
-        h = _bcd_to_int(self._read(0x02) & 0x3F)
-        d = _bcd_to_int(self._read(0x04))
-        mo = _bcd_to_int(self._read(0x05) & 0x1F)
-        y = _bcd_to_int(self._read(0x06)) + 2000
-        return datetime(y, mo, d, h, m, s)
+        if not self._available:
+            return None
+        with open(self._device, "rb") as f:
+            buf = bytearray(struct.calcsize(RTC_TIME_FMT))
+            fcntl.ioctl(f.fileno(), RTC_RD_TIME, buf)
+        return _unpack_rtc_time(buf)
 
     def set_alarm(self, seconds: int) -> bool:
-        """Set Alarm 1 to fire after `seconds` from now.
+        """Set RTC alarm to fire after `seconds` from now.
 
-        Configures the DS3231 to pull SQW/INT low when the alarm
-        matches hours, minutes, and seconds (A1M4=1, A1M3=0, A1M2=0, A1M1=0).
-        Returns True on success.
+        Uses the kernel RTC alarm interface. When the alarm fires,
+        the DS3231 SQW/INT pin goes LOW, which triggers gpio-shutdown
+        to wake the Pi from halt.
         """
-        if self._bus is None:
+        if not self._available:
             logger.warning("DS3231 not available — cannot set alarm")
             return False
 
         target = self.now() + timedelta(seconds=seconds)
-        logger.info("Setting DS3231 alarm for %s (in %d seconds)", target, seconds)
+        logger.info("Setting RTC alarm for %s (in %d seconds)", target, seconds)
 
-        # Write Alarm 1 registers: seconds, minutes, hours, day
-        self._write(REG_ALARM1_SECONDS, _int_to_bcd(target.second))       # A1M1=0
-        self._write(REG_ALARM1_SECONDS + 1, _int_to_bcd(target.minute))   # A1M2=0
-        self._write(REG_ALARM1_SECONDS + 2, _int_to_bcd(target.hour))     # A1M3=0
-        self._write(REG_ALARM1_SECONDS + 3, 0x80 | _int_to_bcd(target.day))  # A1M4=1 (match h/m/s only)
+        alarm_buf = _pack_rtc_time(target)
 
-        # Clear alarm 1 flag (A1F) in status register
-        status = self._read(REG_STATUS)
-        self._write(REG_STATUS, status & ~0x01)
+        with open(self._device, "wb") as f:
+            fd = f.fileno()
+            # Disable any existing alarm
+            fcntl.ioctl(fd, RTC_AIE_OFF, 0)
+            # Set new alarm time
+            fcntl.ioctl(fd, RTC_ALM_SET, alarm_buf)
+            # Enable alarm interrupt
+            fcntl.ioctl(fd, RTC_AIE_ON, 0)
 
-        # Enable alarm 1 interrupt: set A1IE=1, INTCN=1
-        control = self._read(REG_CONTROL)
-        control |= 0x05   # bit 0 = A1IE, bit 2 = INTCN
-        control &= ~0x02  # bit 1 = A2IE off
-        self._write(REG_CONTROL, control)
-
-        logger.info("DS3231 alarm set — SQW/INT will go LOW at %s", target)
+        logger.info("RTC alarm set — SQW/INT will go LOW at %s", target)
         return True
 
     def clear_alarm(self) -> None:
-        """Clear alarm 1 flag so SQW/INT goes high again."""
-        if self._bus is None:
+        """Disable alarm interrupt."""
+        if not self._available:
             return
-        status = self._read(REG_STATUS)
-        self._write(REG_STATUS, status & ~0x01)
+        try:
+            with open(self._device, "wb") as f:
+                fcntl.ioctl(f.fileno(), RTC_AIE_OFF, 0)
+        except Exception as e:
+            logger.warning("Could not clear RTC alarm: %s", e)
