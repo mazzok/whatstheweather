@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WeatherPi GPIO Verkabelung</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: #1a1a2e; color: #eee; padding: 20px; }
+  h1 { text-align: center; margin-bottom: 5px; font-size: 1.8em; color: #fff; }
+  .subtitle { text-align: center; color: #888; margin-bottom: 20px; font-size: 0.95em; }
+
+  .filter-bar { text-align: center; margin-bottom: 20px; }
+  .filter-btn {
+    padding: 8px 20px; margin: 3px; border: none; border-radius: 6px;
+    cursor: pointer; font-size: 0.9em; font-weight: bold;
+    opacity: 0.5; transition: all 0.3s;
+  }
+  .filter-btn:hover { opacity: 1; transform: scale(1.05); }
+  .filter-btn.active { opacity: 1; box-shadow: 0 0 12px rgba(255,255,255,0.3); }
+  .btn-all { background: #555; color: #fff; }
+  .btn-wittypi { background: #00b894; color: #fff; }
+  .btn-epaper { background: #3498db; color: #fff; }
+
+  .diagram-wrap { display: flex; justify-content: center; margin-bottom: 25px; overflow-x: auto; }
+
+  .info-boxes { max-width: 900px; margin: 0 auto; }
+  .info-box { padding: 10px 14px; margin-top: 10px; font-size: 0.85em; border-radius: 6px; }
+  .info-warning { background: #2a0a0a; border-left: 3px solid #e94560; }
+  .info-warning strong { color: #e94560; }
+  .info-success { background: #0a2a0a; border-left: 3px solid #00b894; }
+  .info-success strong { color: #00b894; }
+  .info-note { background: #2a1a0a; border-left: 3px solid #f39c12; }
+  .info-note strong { color: #f39c12; }
+  .info-box a { color: #a8d8ea; }
+</style>
+</head>
+<body>
+
+<h1>WeatherPi GPIO Verkabelung</h1>
+<p class="subtitle">WittyPi 4 L3V7 (2x20 Female) &mdash; 7 Jumper-Kabel &mdash; Raspberry Pi Zero 2 W (2x20 Male) &mdash; 9 Adern e-Paper</p>
+
+<div class="filter-bar">
+  <button class="filter-btn btn-all active" onclick="setFilter('all')">Alle</button>
+  <button class="filter-btn btn-wittypi" onclick="setFilter('wittypi')">WittyPi (7 Jumper)</button>
+  <button class="filter-btn btn-epaper" onclick="setFilter('epaper')">e-Paper (9 Adern)</button>
+</div>
+
+<div class="diagram-wrap">
+  <svg id="pinout-svg" width="1200" height="800"></svg>
+</div>
+
+<div class="info-boxes">
+  <div class="info-box info-warning">
+    <strong>&#9888; GPIO 17 Konflikt:</strong> WittyPi SYS_UP und e-Paper RST wollen beide GPIO 17.
+    L&ouml;sung: WittyPi SYS_UP auf <strong>GPIO 27 (Pin 13)</strong> umkonfigurieren.
+    <a href="https://www.uugear.com/portfolio/change-the-pin-that-used-by-witty-pi/">Anleitung &rarr;</a>
+  </div>
+  <div class="info-box info-success">
+    <strong>&#10004; Kein Pin-Konflikt:</strong> WittyPi (Pins 2,3,5,6,7,8,13) und e-Paper (Pins 11,12,14,17,18,19,22,23,24) &mdash; keine &Uuml;berschneidung.
+  </div>
+  <div class="info-box info-note">
+    <strong>Setup:</strong> e-Paper HAT per 9-adriges SPI-Kabel auf den Pi. WittyPi seitlich per 7 Jumper (M-to-F, 10cm). 3.7V LiPo (5000mAh, PH2.0) an WittyPi. 3 von 10 Jumpern bleiben &uuml;brig.
+  </div>
+</div>
+
+<script>
+const SVG_NS = 'http://www.w3.org/2000/svg';
+const svg = document.getElementById('pinout-svg');
+
+const PIN_R = 12;
+const ROW_GAP = 32;
+const COL_GAP = 30;
+const HEADER_Y = 80;
+
+const WITTY_X = 180;   // left header center (left col)
+const PI_X = 880;       // right header center (left col)
+
+// All 40 pins info
+const PIN_INFO = {
+  1:  { gpio: '3.3V',            type: 'pwr33' },
+  2:  { gpio: '5V',              type: 'pwr5' },
+  3:  { gpio: 'GPIO 2 (SDA)',    type: 'i2c' },
+  4:  { gpio: '5V',              type: 'pwr5' },
+  5:  { gpio: 'GPIO 3 (SCL)',    type: 'i2c' },
+  6:  { gpio: 'GND',             type: 'gnd' },
+  7:  { gpio: 'GPIO 4',          type: 'gpio' },
+  8:  { gpio: 'GPIO 14 (TXD)',   type: 'uart' },
+  9:  { gpio: 'GND',             type: 'gnd' },
+  10: { gpio: 'GPIO 15 (RXD)',   type: 'uart' },
+  11: { gpio: 'GPIO 17',         type: 'gpio' },
+  12: { gpio: 'GPIO 18',         type: 'gpio' },
+  13: { gpio: 'GPIO 27',         type: 'gpio' },
+  14: { gpio: 'GND',             type: 'gnd' },
+  15: { gpio: 'GPIO 22',         type: 'gpio' },
+  16: { gpio: 'GPIO 23',         type: 'gpio' },
+  17: { gpio: '3.3V',            type: 'pwr33' },
+  18: { gpio: 'GPIO 24',         type: 'gpio' },
+  19: { gpio: 'GPIO 10 (MOSI)',  type: 'spi' },
+  20: { gpio: 'GND',             type: 'gnd' },
+  21: { gpio: 'GPIO 9 (MISO)',   type: 'spi' },
+  22: { gpio: 'GPIO 25',         type: 'gpio' },
+  23: { gpio: 'GPIO 11 (SCLK)', type: 'spi' },
+  24: { gpio: 'GPIO 8 (CE0)',    type: 'spi' },
+  25: { gpio: 'GND',             type: 'gnd' },
+  26: { gpio: 'GPIO 7 (CE1)',    type: 'spi' },
+  27: { gpio: 'GPIO 0',          type: 'gpio' },
+  28: { gpio: 'GPIO 1',          type: 'gpio' },
+  29: { gpio: 'GPIO 5',          type: 'gpio' },
+  30: { gpio: 'GND',             type: 'gnd' },
+  31: { gpio: 'GPIO 6',          type: 'gpio' },
+  32: { gpio: 'GPIO 12',         type: 'gpio' },
+  33: { gpio: 'GPIO 13',         type: 'gpio' },
+  34: { gpio: 'GND',             type: 'gnd' },
+  35: { gpio: 'GPIO 19',         type: 'gpio' },
+  36: { gpio: 'GPIO 16',         type: 'gpio' },
+  37: { gpio: 'GPIO 26',         type: 'gpio' },
+  38: { gpio: 'GPIO 20',         type: 'gpio' },
+  39: { gpio: 'GND',             type: 'gnd' },
+  40: { gpio: 'GPIO 21',         type: 'gpio' },
+};
+
+const TYPE_COLORS = {
+  pwr33: '#f39c12', pwr5: '#e74c3c', gnd: '#555',
+  i2c: '#3498db', spi: '#8e44ad', gpio: '#27ae60', uart: '#e67e22',
+};
+
+// WittyPi jumper connections: wittyPi physical pin -> Pi physical pin
+// WittyPi header is identical layout to Pi header (pass-through)
+// The 7 jumper cables connect these specific pins:
+const WITTY_CONNS = [
+  { wittyPin: 2,  piPin: 2,  label: '5V',     func: 'Strom',   color: '#e74c3c', jumper: 'J1' },
+  { wittyPin: 3,  piPin: 3,  label: 'SDA',    func: 'I2C',     color: '#3498db', jumper: 'J2' },
+  { wittyPin: 5,  piPin: 5,  label: 'SCL',    func: 'I2C',     color: '#3498db', jumper: 'J3' },
+  { wittyPin: 6,  piPin: 6,  label: 'GND',    func: 'Masse',   color: '#7f8c8d', jumper: 'J4' },
+  { wittyPin: 7,  piPin: 7,  label: 'HALT',   func: 'GPIO 4',  color: '#27ae60', jumper: 'J5' },
+  { wittyPin: 8,  piPin: 8,  label: 'TXD',    func: 'GPIO 14', color: '#e67e22', jumper: 'J6' },
+  // SYS_UP: WittyPi Pin 11 (GPIO17) -> Pi Pin 13 (GPIO27) REMAPPED!
+  { wittyPin: 11, piPin: 13, label: 'SYS_UP', func: '→ GPIO27', color: '#f1c40f', jumper: 'J7', remap: true },
+];
+
+// e-Paper connections (pi pins only, cable from HAT connector)
+const EPAPER_CONNS = [
+  { piPin: 17, label: 'VCC',  color: '#ff0000', colorName: 'ROT' },
+  { piPin: 14, label: 'GND',  color: '#555',    colorName: 'SCHWARZ' },
+  { piPin: 19, label: 'DIN',  color: '#2196F3', colorName: 'BLAU' },
+  { piPin: 23, label: 'CLK',  color: '#d4ac0d', colorName: 'GELB' },
+  { piPin: 24, label: 'CS',   color: '#ff9800', colorName: 'ORANGE' },
+  { piPin: 22, label: 'DC',   color: '#4caf50', colorName: 'GRÜN' },
+  { piPin: 11, label: 'RST',  color: '#ccc',    colorName: 'WEISS' },
+  { piPin: 18, label: 'BUSY', color: '#9c27b0', colorName: 'LILA' },
+  { piPin: 12, label: 'PWR',  color: '#795548', colorName: 'BRAUN' },
+];
+
+const wittyPiPinSet = new Set(WITTY_CONNS.map(c => c.wittyPin));
+const wittyPiDestSet = new Set(WITTY_CONNS.map(c => c.piPin));
+const ePaperPinSet = new Set(EPAPER_CONNS.map(c => c.piPin));
+
+// Map witty pin -> connection info (for labels)
+const wittyPinMap = {};
+WITTY_CONNS.forEach(c => { wittyPinMap[c.wittyPin] = c; });
+const piWittyMap = {};
+WITTY_CONNS.forEach(c => { piWittyMap[c.piPin] = c; });
+const piEpaperMap = {};
+EPAPER_CONNS.forEach(c => { piEpaperMap[c.piPin] = c; });
+
+function pinPos(baseX, pin) {
+  const row = Math.ceil(pin / 2) - 1;
+  const col = (pin % 2 === 1) ? 0 : 1;
+  return { x: baseX + col * COL_GAP, y: HEADER_Y + row * ROW_GAP };
+}
+
+function el(tag, attrs, text) {
+  const e = document.createElementNS(SVG_NS, tag);
+  for (const [k, v] of Object.entries(attrs || {})) e.setAttribute(k, v);
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+
+function render(filter) {
+  svg.innerHTML = '';
+  svg.appendChild(el('rect', { width: 1200, height: 800, fill: '#16213e', rx: 12 }));
+
+  // --- Draw WittyPi Header (left, 2x20) ---
+  const wBoardX = WITTY_X - 22;
+  const wBoardY = HEADER_Y - 18;
+  const boardW = COL_GAP + 44;
+  const boardH = 20 * ROW_GAP + 4;
+
+  svg.appendChild(el('rect', {
+    x: wBoardX - 40, y: wBoardY - 35, width: boardW + 80, height: boardH + 55,
+    fill: '#004d40', stroke: '#00b894', 'stroke-width': 2, rx: 8, opacity: 0.3,
+  }));
+  svg.appendChild(el('text', {
+    x: WITTY_X + COL_GAP / 2, y: wBoardY - 18, fill: '#00b894',
+    'font-size': 14, 'text-anchor': 'middle', 'font-weight': 'bold', 'font-family': 'Segoe UI',
+  }, 'WittyPi 4 L3V7'));
+  svg.appendChild(el('text', {
+    x: WITTY_X + COL_GAP / 2, y: wBoardY - 4, fill: '#00b894',
+    'font-size': 10, 'text-anchor': 'middle', 'font-family': 'Segoe UI',
+  }, '(2×20 Female Header)'));
+
+  // WittyPi PCB outline
+  svg.appendChild(el('rect', {
+    x: wBoardX, y: wBoardY, width: boardW, height: boardH,
+    fill: 'none', stroke: '#00b894', 'stroke-width': 1, rx: 4, 'stroke-dasharray': '4,3', opacity: 0.5,
+  }));
+
+  for (let pin = 1; pin <= 40; pin++) {
+    const pos = pinPos(WITTY_X, pin);
+    const info = PIN_INFO[pin];
+    const isUsed = wittyPiPinSet.has(pin);
+    const baseColor = TYPE_COLORS[info.type] || '#34495e';
+
+    let dimmed = (filter === 'epaper');
+    let fillColor = dimmed ? '#222' : (isUsed ? baseColor : '#2c3e50');
+    let strokeColor = dimmed ? '#333' : (isUsed ? '#00e6b0' : 'rgba(255,255,255,0.15)');
+    let sw = isUsed && !dimmed ? 3 : 1.5;
+
+    svg.appendChild(el('circle', {
+      cx: pos.x, cy: pos.y, r: PIN_R, fill: fillColor,
+      stroke: strokeColor, 'stroke-width': sw,
+    }));
+    svg.appendChild(el('text', {
+      x: pos.x, y: pos.y, fill: dimmed ? '#444' : '#fff',
+      'font-size': 9, 'text-anchor': 'middle', 'dominant-baseline': 'central',
+      'font-weight': 'bold', 'font-family': 'Segoe UI',
+    }, String(pin)));
+
+    // Labels for used pins
+    if (isUsed && !dimmed) {
+      const conn = wittyPinMap[pin];
+      const labelX = (pin % 2 === 1) ? pos.x - 18 : pos.x + 18;
+      const anchor = (pin % 2 === 1) ? 'end' : 'start';
+      svg.appendChild(el('text', {
+        x: labelX, y: pos.y - 1, fill: conn.color,
+        'font-size': 9, 'text-anchor': anchor, 'dominant-baseline': 'central',
+        'font-weight': 'bold', 'font-family': 'Segoe UI',
+      }, conn.jumper + ' ' + conn.label));
+    }
+  }
+
+  // --- Draw Pi Header (right, 2x20) ---
+  const pBoardX = PI_X - 22;
+  const pBoardY = HEADER_Y - 18;
+
+  svg.appendChild(el('rect', {
+    x: pBoardX - 40, y: pBoardY - 35, width: boardW + 80, height: boardH + 55,
+    fill: '#1b5e20', stroke: '#66bb6a', 'stroke-width': 2, rx: 8, opacity: 0.3,
+  }));
+  svg.appendChild(el('text', {
+    x: PI_X + COL_GAP / 2, y: pBoardY - 18, fill: '#66bb6a',
+    'font-size': 14, 'text-anchor': 'middle', 'font-weight': 'bold', 'font-family': 'Segoe UI',
+  }, 'Raspberry Pi Zero 2 W'));
+  svg.appendChild(el('text', {
+    x: PI_X + COL_GAP / 2, y: pBoardY - 4, fill: '#66bb6a',
+    'font-size': 10, 'text-anchor': 'middle', 'font-family': 'Segoe UI',
+  }, '(2×20 Male Header)'));
+
+  svg.appendChild(el('rect', {
+    x: pBoardX, y: pBoardY, width: boardW, height: boardH,
+    fill: 'none', stroke: '#66bb6a', 'stroke-width': 1, rx: 4, 'stroke-dasharray': '4,3', opacity: 0.5,
+  }));
+
+  // USB arrow at bottom
+  svg.appendChild(el('text', {
+    x: PI_X + COL_GAP / 2, y: pBoardY + boardH + 14, fill: '#555',
+    'font-size': 10, 'text-anchor': 'middle', 'font-family': 'Segoe UI',
+  }, '▼ USB'));
+
+  for (let pin = 1; pin <= 40; pin++) {
+    const pos = pinPos(PI_X, pin);
+    const info = PIN_INFO[pin];
+    const isWitty = wittyPiDestSet.has(pin);
+    const isEpaper = ePaperPinSet.has(pin);
+    const baseColor = TYPE_COLORS[info.type] || '#34495e';
+
+    let dimmed = false;
+    if (filter === 'wittypi' && !isWitty) dimmed = true;
+    if (filter === 'epaper' && !isEpaper) dimmed = true;
+
+    let fillColor = dimmed ? '#222' : baseColor;
+    let strokeColor = dimmed ? '#333' :
+      isWitty && (filter === 'all' || filter === 'wittypi') ? '#00e6b0' :
+      isEpaper && (filter === 'all' || filter === 'epaper') ? '#64b5f6' :
+      'rgba(255,255,255,0.15)';
+    let sw = (isWitty || isEpaper) && !dimmed ? 3 : 1.5;
+
+    svg.appendChild(el('circle', {
+      cx: pos.x, cy: pos.y, r: PIN_R, fill: fillColor,
+      stroke: strokeColor, 'stroke-width': sw,
+    }));
+    svg.appendChild(el('text', {
+      x: pos.x, y: pos.y, fill: dimmed ? '#444' : '#fff',
+      'font-size': 9, 'text-anchor': 'middle', 'dominant-baseline': 'central',
+      'font-weight': 'bold', 'font-family': 'Segoe UI',
+    }, String(pin)));
+
+    // GPIO label outside
+    if (!dimmed) {
+      const labelX = (pin % 2 === 1) ? pos.x - 18 : pos.x + 18;
+      const anchor = (pin % 2 === 1) ? 'end' : 'start';
+      let labelText = info.gpio;
+      let labelColor = '#666';
+
+      if (isWitty && (filter === 'all' || filter === 'wittypi')) {
+        const c = piWittyMap[pin];
+        labelText = c.jumper + ' ← ' + c.label;
+        labelColor = '#00e6b0';
+      } else if (isEpaper && (filter === 'all' || filter === 'epaper')) {
+        const c = piEpaperMap[pin];
+        labelText = c.colorName + ' ← ' + c.label;
+        labelColor = '#64b5f6';
+      }
+
+      svg.appendChild(el('text', {
+        x: labelX, y: pos.y - 1, fill: labelColor,
+        'font-size': 8.5, 'text-anchor': anchor, 'dominant-baseline': 'central',
+        'font-family': 'Segoe UI', 'font-weight': (isWitty || isEpaper) ? 'bold' : 'normal',
+      }, labelText));
+    }
+  }
+
+  // --- Wires: WittyPi -> Pi (Jumper cables) ---
+  WITTY_CONNS.forEach(conn => {
+    const from = pinPos(WITTY_X, conn.wittyPin);
+    const to = pinPos(PI_X, conn.piPin);
+    const dimmed = (filter === 'epaper');
+
+    // Start from right side of witty pin, end at left side of pi pin
+    const x1 = from.x + (from.x === WITTY_X ? 0 : COL_GAP) + PIN_R + 2;
+    const x2 = to.x - (to.x === PI_X ? PIN_R + 2 : PIN_R + 2 - COL_GAP);
+
+    // Bezier control points
+    const dx = (x2 - x1);
+    const cp1x = x1 + dx * 0.35;
+    const cp2x = x2 - dx * 0.35;
+
+    const wireColor = dimmed ? '#2a2a2a' : conn.color;
+    const wireWidth = dimmed ? 1 : (conn.remap ? 3.5 : 2.5);
+    const wireOpacity = dimmed ? 0.3 : 0.75;
+    const dashArray = conn.remap ? '6,4' : 'none';
+
+    svg.appendChild(el('path', {
+      d: `M${x1},${from.y} C${cp1x},${from.y} ${cp2x},${to.y} ${x2},${to.y}`,
+      fill: 'none', stroke: wireColor, 'stroke-width': wireWidth,
+      opacity: wireOpacity, 'stroke-linecap': 'round',
+      'stroke-dasharray': dashArray,
+    }));
+
+    // Jumper label in middle of wire
+    if (!dimmed) {
+      const midX = (x1 + x2) / 2;
+      const midY = (from.y + to.y) / 2;
+      // Background pill
+      const textW = conn.remap ? 80 : 30;
+      svg.appendChild(el('rect', {
+        x: midX - textW / 2, y: midY - 9, width: textW, height: 18,
+        fill: '#16213e', stroke: conn.color, 'stroke-width': 1, rx: 9, opacity: 0.95,
+      }));
+      svg.appendChild(el('text', {
+        x: midX, y: midY, fill: conn.color,
+        'font-size': 9, 'text-anchor': 'middle', 'dominant-baseline': 'central',
+        'font-weight': 'bold', 'font-family': 'Segoe UI',
+      }, conn.remap ? conn.jumper + ' ⚠ REMAP' : conn.jumper));
+    }
+  });
+
+  // --- e-Paper indicator on Pi side (small colored dots outside) ---
+  if (filter !== 'wittypi') {
+    EPAPER_CONNS.forEach(conn => {
+      const pos = pinPos(PI_X, conn.piPin);
+      const isRight = (conn.piPin % 2 === 0);
+      const dotX = isRight ? pos.x + PIN_R + 70 : pos.x - PIN_R - 70;
+
+      // Small cable color dot
+      svg.appendChild(el('circle', {
+        cx: dotX, cy: pos.y, r: 5, fill: conn.color,
+        stroke: 'rgba(255,255,255,0.3)', 'stroke-width': 1,
+      }));
+    });
+  }
+
+  // --- Legend ---
+  const legX = 30;
+  const legY = HEADER_Y + boardH + 40;
+  svg.appendChild(el('text', {
+    x: legX, y: legY, fill: '#f39c12', 'font-size': 12,
+    'font-weight': 'bold', 'font-family': 'Segoe UI',
+  }, 'Legende'));
+
+  const legendItems = [
+    { color: '#f39c12', label: '3.3V' },
+    { color: '#e74c3c', label: '5V' },
+    { color: '#555',    label: 'GND' },
+    { color: '#3498db', label: 'I2C' },
+    { color: '#8e44ad', label: 'SPI' },
+    { color: '#27ae60', label: 'GPIO' },
+    { color: '#e67e22', label: 'UART' },
+  ];
+  legendItems.forEach((item, i) => {
+    const lx = legX + i * 80;
+    svg.appendChild(el('circle', { cx: lx + 8, cy: legY + 20, r: 6, fill: item.color }));
+    svg.appendChild(el('text', {
+      x: lx + 20, y: legY + 21, fill: '#ccc', 'font-size': 10,
+      'dominant-baseline': 'central', 'font-family': 'Segoe UI',
+    }, item.label));
+  });
+
+  // Wire legend
+  svg.appendChild(el('line', {
+    x1: legX, y1: legY + 42, x2: legX + 30, y2: legY + 42,
+    stroke: '#00e6b0', 'stroke-width': 2.5,
+  }));
+  svg.appendChild(el('text', {
+    x: legX + 36, y: legY + 43, fill: '#ccc', 'font-size': 10,
+    'dominant-baseline': 'central', 'font-family': 'Segoe UI',
+  }, 'Jumper-Kabel'));
+
+  svg.appendChild(el('line', {
+    x1: legX + 150, y1: legY + 42, x2: legX + 180, y2: legY + 42,
+    stroke: '#f1c40f', 'stroke-width': 3, 'stroke-dasharray': '6,4',
+  }));
+  svg.appendChild(el('text', {
+    x: legX + 186, y: legY + 43, fill: '#ccc', 'font-size': 10,
+    'dominant-baseline': 'central', 'font-family': 'Segoe UI',
+  }, 'Umgemappter Pin (J7: WittyPi Pin 11 → Pi Pin 13)'));
+}
+
+let currentFilter = 'all';
+function setFilter(f) {
+  currentFilter = f;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  document.querySelector(`[onclick="setFilter('${f}')"]`).classList.add('active');
+  render(f);
+}
+
+render('all');
+</script>
+
+</body>
+</html>
