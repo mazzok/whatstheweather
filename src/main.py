@@ -9,16 +9,49 @@ from src.config import load_config
 from src.location import get_location
 from src.weather import get_weather
 from src.renderer import render_display
-from src.battery import BatteryMonitor
 from src.display import update_display_4gray
+from src.wittypi import WittyPi
 
 CONFIG_PATH = "config.yaml"
 
-CHARGE_POLL_INTERVAL = 300  # 5 minutes
+NETWORK_TIMEOUT = 30
+NETWORK_CHECK_INTERVAL = 2
 
 
-def run_once(config: dict, battery: BatteryMonitor) -> None:
+def _wait_for_network(timeout: int = NETWORK_TIMEOUT) -> bool:
+    """Wait up to timeout seconds for network connectivity. Returns True if connected."""
     logger = logging.getLogger(__name__)
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            subprocess.run(
+                ["ping", "-c", "1", "-W", "1", "1.1.1.1"],
+                capture_output=True,
+                timeout=3,
+            )
+            return True
+        except Exception:
+            pass
+        time.sleep(NETWORK_CHECK_INTERVAL)
+    logger.warning("Network not available after %ds", timeout)
+    return False
+
+
+def run_once(config: dict, battery_pct: int, off_grid_days: int) -> None:
+    logger = logging.getLogger(__name__)
+
+    has_network = _wait_for_network()
+
+    if not has_network:
+        # No network: render with error, battery info still shown
+        image = render_display(
+            get_weather(0, 0),  # will fail and return error WeatherData
+            battery_pct=battery_pct,
+            off_grid_days=off_grid_days,
+            error="Kein Netz",
+        )
+        update_display_4gray(image)
+        return
 
     # 1. Get location
     location = get_location()
@@ -27,20 +60,15 @@ def run_once(config: dict, battery: BatteryMonitor) -> None:
         lat, lon, city = 48.2082, 16.3738, config.get("city", "Wien")
     else:
         lat, lon, city = location
-        # Config override for city name
         city = config.get("city", city)
 
     # 2. Get weather data
     weather = get_weather(lat, lon)
 
-    # 3. Get battery and off-grid days
-    battery_pct = battery.percentage()
-    off_grid_days = battery.get_off_grid_days()
-
-    # 4. Render
+    # 3. Render
     image = render_display(weather, battery_pct=battery_pct, off_grid_days=off_grid_days, city=city)
 
-    # 5. Update display
+    # 4. Update display
     if config["debug"]:
         preview_path = "preview.png"
         image.save(preview_path)
@@ -53,19 +81,6 @@ def run_once(config: dict, battery: BatteryMonitor) -> None:
             logger.info("Display update skipped")
     else:
         update_display_4gray(image)
-
-
-def _charge_loop(config: dict, battery: BatteryMonitor) -> None:
-    """Poll while charging. Exits when power is disconnected."""
-    logger = logging.getLogger(__name__)
-    logger.info("Charging detected — entering charge poll loop")
-
-    while battery.is_charging():
-        run_once(config, battery)
-        logger.info("Charge poll: next check in %d seconds", CHARGE_POLL_INTERVAL)
-        time.sleep(CHARGE_POLL_INTERVAL)
-
-    logger.info("Charging stopped — resuming normal operation")
 
 
 def main() -> None:
@@ -88,21 +103,21 @@ def main() -> None:
     logger = logging.getLogger(__name__)
     logger.info("Weather display starting (debug=%s)", config["debug"])
 
-    battery = BatteryMonitor()
+    wittypi = WittyPi()
 
     if config["debug"]:
         while True:
-            run_once(config, battery)
+            battery_pct = wittypi.battery_percentage()
+            off_grid_days = wittypi.get_off_grid_days()
+            run_once(config, battery_pct, off_grid_days)
             logger.info("Next update in %d seconds", config["interval"])
             time.sleep(config["interval"])
     else:
-        run_once(config, battery)
-
-        if battery.is_charging():
-            logger.info("Power connected — staying alive for timer")
-        else:
-            logger.info("On battery — entering deep sleep...")
-            subprocess.run(["sudo", "shutdown", "-h", "now"])
+        battery_pct = wittypi.battery_percentage()
+        off_grid_days = wittypi.get_off_grid_days()
+        run_once(config, battery_pct, off_grid_days)
+        logger.info("Shutting down...")
+        subprocess.run(["sudo", "shutdown", "-h", "now"])
 
 
 if __name__ == "__main__":
