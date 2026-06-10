@@ -104,6 +104,7 @@ def main() -> None:
     logger.info("Weather display starting (debug=%s)", config["debug"])
 
     wittypi = WittyPi()
+    wittypi.log_boot()
 
     if config["debug"]:
         while True:

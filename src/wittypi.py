@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -23,6 +23,7 @@ except ImportError:
     SMBus = None  # type: ignore[assignment,misc]
 
 DEFAULT_RECHARGE_PATH = Path.home() / ".weather_recharge"
+DEFAULT_BOOT_LOG_PATH = Path.home() / ".weather_battery_log.csv"
 
 
 class WittyPi:
@@ -30,8 +31,13 @@ class WittyPi:
     VOLTAGE_FULL = 4.2
     USB_CHARGING_THRESHOLD = 4.0
 
-    def __init__(self, recharge_path: Path = DEFAULT_RECHARGE_PATH) -> None:
+    def __init__(
+        self,
+        recharge_path: Path = DEFAULT_RECHARGE_PATH,
+        boot_log_path: Path = DEFAULT_BOOT_LOG_PATH,
+    ) -> None:
         self._recharge_path = recharge_path
+        self._boot_log_path = boot_log_path
         self._bus = None
         try:
             if SMBus is None:
@@ -103,3 +109,19 @@ class WittyPi:
             )
         except OSError as e:
             logger.warning("Could not write recharge state: %s", e)
+
+    def log_boot(self) -> None:
+        """Append one CSV row with current battery state."""
+        try:
+            write_header = not self._boot_log_path.exists()
+            with open(self._boot_log_path, "a") as f:
+                if write_header:
+                    f.write("timestamp,battery_v,battery_pct,usb_v,charging\n")
+                ts = datetime.now().isoformat(timespec="seconds")
+                bv = f"{self.battery_voltage():.2f}"
+                bp = str(self.battery_percentage())
+                uv = f"{self.usb_voltage():.2f}"
+                ch = "true" if self.is_charging() else "false"
+                f.write(f"{ts},{bv},{bp},{uv},{ch}\n")
+        except OSError as e:
+            logger.warning("Could not write boot log: %s", e)

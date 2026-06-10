@@ -153,3 +153,58 @@ class TestOffGridDays:
         wp = WittyPi(recharge_path=recharge_path)
         days = wp.get_off_grid_days()
         assert days == (date.today() - date(2026, 4, 10)).days
+
+
+class TestLogBoot:
+    def test_creates_csv_with_header_and_row(self, mock_smbus, tmp_path):
+        mock_smbus.read_byte_data.side_effect = lambda addr, reg: {
+            0x01: 3, 0x02: 92,
+            0x03: 0, 0x04: 0,
+        }.get(reg, 0)
+        from src.wittypi import WittyPi
+        log_path = tmp_path / "battery_log.csv"
+        wp = WittyPi(
+            recharge_path=tmp_path / ".weather_recharge",
+            boot_log_path=log_path,
+        )
+        wp.log_boot()
+        lines = log_path.read_text().strip().split("\n")
+        assert len(lines) == 2
+        assert lines[0] == "timestamp,battery_v,battery_pct,usb_v,charging"
+        row = lines[1].split(",")
+        assert row[1] == "3.92"
+        assert row[2] == "77"
+        assert row[3] == "0.00"
+        assert row[4] == "false"
+
+    def test_appends_without_duplicate_header(self, mock_smbus, tmp_path):
+        mock_smbus.read_byte_data.side_effect = lambda addr, reg: {
+            0x01: 3, 0x02: 92,
+            0x03: 0, 0x04: 0,
+        }.get(reg, 0)
+        from src.wittypi import WittyPi
+        log_path = tmp_path / "battery_log.csv"
+        wp = WittyPi(
+            recharge_path=tmp_path / ".weather_recharge",
+            boot_log_path=log_path,
+        )
+        wp.log_boot()
+        wp.log_boot()
+        lines = log_path.read_text().strip().split("\n")
+        assert len(lines) == 3
+        assert lines[0] == "timestamp,battery_v,battery_pct,usb_v,charging"
+
+    def test_log_boot_survives_write_error(self, mock_smbus, tmp_path):
+        mock_smbus.read_byte_data.side_effect = lambda addr, reg: {
+            0x01: 3, 0x02: 92,
+            0x03: 0, 0x04: 0,
+        }.get(reg, 0)
+        from src.wittypi import WittyPi
+        # Point to a non-existent directory so open() fails
+        log_path = tmp_path / "no_such_dir" / "battery_log.csv"
+        wp = WittyPi(
+            recharge_path=tmp_path / ".weather_recharge",
+            boot_log_path=log_path,
+        )
+        # Should not raise
+        wp.log_boot()
