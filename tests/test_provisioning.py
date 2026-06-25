@@ -52,3 +52,44 @@ class TestRunProvisioning:
             from src.provisioning import run_provisioning
             result = run_provisioning("TestSSID", "testpass", timeout=10)
         assert result is False
+
+
+from PIL import Image
+
+
+class TestRenderProvisioningScreen:
+    def test_calls_display_function_once(self):
+        from src.provisioning import render_provisioning_screen
+        calls = []
+        render_provisioning_screen("TestNet", "pass123", lambda img: calls.append(img))
+        assert len(calls) == 1
+
+    def test_passes_pil_image_to_display_fn(self):
+        from src.provisioning import render_provisioning_screen
+        captured = []
+        render_provisioning_screen("TestNet", "pass123", lambda img: captured.append(img))
+        assert isinstance(captured[0], Image.Image)
+
+    def test_image_has_correct_dimensions(self):
+        from src.provisioning import render_provisioning_screen
+        captured = []
+        render_provisioning_screen("TestNet", "pass123", lambda img: captured.append(img))
+        assert captured[0].size == (800, 480)
+
+    def test_image_is_grayscale(self):
+        from src.provisioning import render_provisioning_screen
+        captured = []
+        render_provisioning_screen("TestNet", "pass123", lambda img: captured.append(img))
+        assert captured[0].mode == "L"
+
+    def test_qr_encodes_wifi_payload(self):
+        from src.provisioning import render_provisioning_screen
+        with patch("src.provisioning.qrcode.QRCode") as mock_qr_cls:
+            mock_qr = MagicMock()
+            mock_qr_cls.return_value = mock_qr
+            # make_image returns something with .convert() that returns a valid Image
+            mock_qr.make_image.return_value = MagicMock(
+                convert=MagicMock(return_value=Image.new("L", (200, 200), 255))
+            )
+            render_provisioning_screen("MyNet", "mypass", lambda img: None)
+        mock_qr.add_data.assert_called_once_with("WIFI:T:WPA;S:MyNet;P:mypass;;")
