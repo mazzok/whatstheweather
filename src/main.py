@@ -11,6 +11,7 @@ from src.weather import get_weather
 from src.renderer import render_display
 from src.display import update_display_4gray
 from src.wittypi import WittyPi
+from src.provisioning import render_provisioning_screen, run_provisioning
 
 CONFIG_PATH = "config.yaml"
 
@@ -43,15 +44,23 @@ def run_once(config: dict, battery_pct: int, off_grid_days: int) -> None:
     has_network = _wait_for_network()
 
     if not has_network:
-        # No network: render with error, battery info still shown
-        image = render_display(
-            get_weather(0, 0),  # will fail and return error WeatherData
-            battery_pct=battery_pct,
-            off_grid_days=off_grid_days,
-            error="Kein Netz",
-        )
-        update_display_4gray(image)
-        return
+        ssid = config.get("provisioning_ssid", "WeatherDisplay")
+        password = config.get("provisioning_password", "weather123")
+        render_provisioning_screen(ssid, password, update_display_4gray)
+        success = run_provisioning(ssid, password, timeout=900)
+        if not success:
+            image = render_display(
+                get_weather(0, 0),
+                battery_pct=battery_pct,
+                off_grid_days=off_grid_days,
+                error="Kein Netz",
+            )
+            update_display_4gray(image)
+            return
+        has_network = _wait_for_network()
+        if not has_network:
+            logger.error("Network unavailable after provisioning — giving up")
+            return
 
     # 1. Get location
     location = get_location()

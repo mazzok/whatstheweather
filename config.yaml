@@ -1,3 +1,5 @@
 debug: false
 interval: 7200
 # city: Wien    # Optional: override auto-detected city name in status bar
+provisioning_ssid: "WeatherDisplay"
+provisioning_password: "weather123"

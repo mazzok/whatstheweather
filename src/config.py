@@ -5,6 +5,8 @@ import logging
 DEFAULTS = {
     "debug": True,
     "interval": 7200,
+    "provisioning_ssid": "WeatherDisplay",
+    "provisioning_password": "weather123",
 }
 
 
