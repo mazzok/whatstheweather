@@ -5,6 +5,7 @@ import subprocess
 from unittest.mock import MagicMock, patch
 
 import pytest
+from PIL import Image
 
 
 class TestRunProvisioning:
@@ -52,9 +53,6 @@ class TestRunProvisioning:
             from src.provisioning import run_provisioning
             result = run_provisioning("TestSSID", "testpass", timeout=10)
         assert result is False
-
-
-from PIL import Image
 
 
 class TestRenderProvisioningScreen:

@@ -44,7 +44,7 @@ def run_provisioning(ssid: str, password: str, timeout: int = 900) -> bool:
 
 
 def render_provisioning_screen(
-    ssid: str, password: str, update_display_fn
+    ssid: str, password: str, update_display_fn: callable
 ) -> None:
     """Render a QR code provisioning screen on the e-ink display.
 
