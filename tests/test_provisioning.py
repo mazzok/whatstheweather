@@ -4,7 +4,6 @@ from __future__ import annotations
 import subprocess
 from unittest.mock import MagicMock, patch
 
-import pytest
 from PIL import Image
 
 
@@ -50,6 +49,15 @@ class TestRunProvisioning:
     def test_returns_false_when_binary_not_found(self):
         with patch("src.provisioning.subprocess.Popen") as mock_popen:
             mock_popen.side_effect = FileNotFoundError()
+            from src.provisioning import run_provisioning
+            result = run_provisioning("TestSSID", "testpass", timeout=10)
+        assert result is False
+
+    def test_returns_false_on_nonzero_exit(self):
+        with patch("src.provisioning.subprocess.Popen") as mock_popen:
+            proc = MagicMock()
+            proc.wait.return_value = 1
+            mock_popen.return_value = proc
             from src.provisioning import run_provisioning
             result = run_provisioning("TestSSID", "testpass", timeout=10)
         assert result is False

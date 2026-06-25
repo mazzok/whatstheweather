@@ -34,12 +34,19 @@ def run_provisioning(ssid: str, password: str, timeout: int = 900) -> bool:
         return False
 
     try:
-        proc.wait(timeout=timeout)
+        rc = proc.wait(timeout=timeout)
+        if rc != 0:
+            logger.error("wifi-connect exited with code %d", rc)
+            return False
         logger.info("wifi-connect exited — network configured")
         return True
     except subprocess.TimeoutExpired:
         logger.warning("Provisioning timed out after %ds", timeout)
         proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
         return False
 
 
