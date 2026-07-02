@@ -92,6 +92,28 @@ def run_once(config: dict, battery_pct: int, off_grid_days: int) -> None:
         update_display_4gray(image)
 
 
+def _run_charging_mode(config: dict, wittypi: WittyPi) -> None:
+    """Loop indefinitely while charger is connected, updating display each interval.
+
+    Sleeps in 60-second chunks so the process stays alive (systemd-safe).
+    Exits when is_charging() goes False; caller is responsible for shutdown.
+    """
+    logger = logging.getLogger(__name__)
+    logger.info("Charger detected — staying awake")
+    while wittypi.is_charging():
+        battery_pct = wittypi.battery_percentage()
+        off_grid_days = wittypi.get_off_grid_days()
+        run_once(config, battery_pct, off_grid_days)
+        remaining = config["interval"]
+        while remaining > 0 and wittypi.is_charging():
+            time.sleep(min(60, remaining))
+            remaining -= 60
+    logger.info("Charger removed — final update, shutting down")
+    battery_pct = wittypi.battery_percentage()
+    off_grid_days = wittypi.get_off_grid_days()
+    run_once(config, battery_pct, off_grid_days)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Weather display")
     parser.add_argument("--debug", action="store_true", help="Enable debug mode (overrides config)")
