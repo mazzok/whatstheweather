@@ -9,7 +9,6 @@ User=pi
 WorkingDirectory=/home/pi/whatstheweather
 ExecStart=/usr/bin/python3 -m src.main
 Environment=PYTHONPATH=/home/pi/whatstheweather
-RuntimeMaxSec=210
 
 [Install]
 WantedBy=multi-user.target
