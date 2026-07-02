@@ -144,6 +144,9 @@ def main() -> None:
             run_once(config, battery_pct, off_grid_days)
             logger.info("Next update in %d seconds", config["interval"])
             time.sleep(config["interval"])
+    elif wittypi.is_charging():
+        _run_charging_mode(config, wittypi)
+        subprocess.run(["sudo", "shutdown", "-h", "now"])
     else:
         battery_pct = wittypi.battery_percentage()
         off_grid_days = wittypi.get_off_grid_days()
