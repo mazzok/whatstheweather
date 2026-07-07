@@ -52,8 +52,7 @@ Beim Flashen der SD-Karte im Raspberry Pi Imager (Advanced Options / Zahnrad-Ico
 - Hostname: z.B. `weatherpi`
 - SSH aktivieren (Passwort- oder Key-Auth)
 - WLAN-Zugangsdaten für die **Erstinstallation** eintragen (wird später ggf. durch
-  die QR-Code-Provisionierung ersetzt/ergänzt — siehe
-  [`docs/superpowers/specs/2026-06-25-wifi-provisioning-design.md`](docs/superpowers/specs/2026-06-25-wifi-provisioning-design.md))
+  die QR-Code-Provisionierung ersetzt/ergänzt, siehe Schritt 8)
 - Zeitzone: `Europe/Vienna`, Locale nach Bedarf
 
 Nach dem ersten Boot per SSH verbinden: `ssh pi@weatherpi.local`
@@ -81,8 +80,8 @@ i2cdetect -y 1   # sollte 0x08 (WittyPi MCU) zeigen
 > sondern ausschließlich über die WittyPi-eigene Software (`wittyPi.sh`, Schritt 7)
 > per I2C-Protokoll mit der MCU kommuniziert. **Keinen** `i2c-rtc`-Overlay in
 > `/boot/firmware/config.txt` eintragen — das ist für ein separates DS3231-Modul
-> gedacht (Vorgänger-Hardware, siehe ältere Specs in `docs/superpowers/`) und
-> kollidiert mit WittyPi. `sudo hwclock -r` wird daher immer "Cannot access the
+> gedacht (Vorgänger-Hardware vor dem WittyPi-Upgrade) und kollidiert mit WittyPi.
+> `sudo hwclock -r` wird daher immer "Cannot access the
 > Hardware Clock" melden — das ist erwartet und kein Fehler. Die Zeit wird
 > stattdessen über NTP (System) und WittyPi's eigenen Sync (Schritt 7) korrekt gehalten.
 
@@ -164,7 +163,7 @@ Im Menü:
    [UUGear-Anleitung](https://www.uugear.com/portfolio/change-the-pin-that-used-by-witty-pi/)) —
    behebt den Pin-17-Konflikt aus Schritt 1
 2. **"Startup when USB power is connected"** aktivieren — nötig für die Charger-Wake-Funktion
-   ([`docs/superpowers/specs/2026-07-02-charger-wake-design.md`](docs/superpowers/specs/2026-07-02-charger-wake-design.md)).
+   (Pi bootet automatisch, sobald ein Ladegerät angeschlossen wird, siehe Verifikation in Schritt 10).
    Falls die Option im Menü fehlt, Firmware-Version prüfen (`cat ~/wittypi/firmware/version`)
    und im WittyPi-4-L3V7-Handbuch den passenden `wittyPi.sh`-Befehl bzw. das I2C-Register nachschlagen.
 3. Schedule-Script laden:
@@ -218,8 +217,7 @@ sudo systemctl start weather-display.service
 sudo journalctl -u weather-display.service -f
 ```
 
-Charger-Wake-Funktion end-to-end testen (siehe
-[`docs/superpowers/specs/2026-07-02-charger-wake-design.md`](docs/superpowers/specs/2026-07-02-charger-wake-design.md)):
+Charger-Wake-Funktion end-to-end testen:
 1. Pi normal herunterfahren: `sudo shutdown -h now`
 2. Warten bis die grüne Pi-LED aus ist
 3. Ladegerät einstecken
