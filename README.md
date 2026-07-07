@@ -2,7 +2,8 @@
 
 Batteriebetriebenes e-Ink-Wetterdisplay auf Raspberry Pi Zero 2 W mit WittyPi 4 L3V7
 Power-Management und Waveshare 7.5" e-Paper Display. Läuft off-grid: bootet alle 2h,
-holt Wetterdaten, aktualisiert das Display, fährt komplett herunter (0.3mA Standby).
+holt Wetterdaten von der GeoSphere-Austria-API (kein API-Key nötig), aktualisiert das
+Display, fährt komplett herunter (0.3mA Standby).
 
 ## Installation (Neuaufsetzen)
 
@@ -25,7 +26,7 @@ interaktive Pinout-Diagramm.
 
 **Wichtig — GPIO-17-Konflikt:** WittyPi's `SYS_UP`-Pin (Witty-Pin 11) und e-Paper `RST`
 wollen beide GPIO 17. Der `SYS_UP`-Jumper muss stattdessen auf **Pi Pin 13 (GPIO 27)**
-gesteckt und WittyPi per Menü auf das neue Pin umkonfiguriert werden (siehe Schritt 6,
+gesteckt und WittyPi per Menü auf das neue Pin umkonfiguriert werden (siehe Schritt 7,
 Menüpunkt "Change the GPIO pin used to detect system status"). Ohne diesen Schritt
 funktioniert entweder die Shutdown-Erkennung oder das Display nicht zuverlässig.
 
@@ -77,14 +78,36 @@ i2cdetect -y 1   # sollte 0x08 (WittyPi MCU) zeigen
 
 > **Hinweis zur Uhrzeit/RTC:** WittyPi 4 L3V7 hat eine eigene RTC (PCF85063A), die
 > **nicht** über den Linux-Kernel-RTC-Mechanismus (`dtoverlay=i2c-rtc,...`) läuft,
-> sondern ausschließlich über die WittyPi-eigene Software (`wittyPi.sh`, Schritt 6)
+> sondern ausschließlich über die WittyPi-eigene Software (`wittyPi.sh`, Schritt 7)
 > per I2C-Protokoll mit der MCU kommuniziert. **Keinen** `i2c-rtc`-Overlay in
 > `/boot/firmware/config.txt` eintragen — das ist für ein separates DS3231-Modul
-> gedacht (Vorgänger-Hardware) und kollidiert mit WittyPi. `sudo hwclock -r` wird
-> daher immer "Cannot access the Hardware Clock" melden — das ist erwartet und kein Fehler.
-> Die Zeit wird stattdessen über NTP (System) und WittyPi's eigenen Sync (Schritt 6) korrekt gehalten.
+> gedacht (Vorgänger-Hardware, siehe ältere Specs in `docs/superpowers/`) und
+> kollidiert mit WittyPi. `sudo hwclock -r` wird daher immer "Cannot access the
+> Hardware Clock" melden — das ist erwartet und kein Fehler. Die Zeit wird
+> stattdessen über NTP (System) und WittyPi's eigenen Sync (Schritt 7) korrekt gehalten.
 
-### 4. Systempakete & Python-Abhängigkeiten
+### 4. Projekt deployen
+
+Repo zuerst klonen — die folgenden Schritte (Python-Abhängigkeiten, WittyPi-Schedule)
+greifen auf Dateien aus dem Repo zu.
+
+```bash
+cd ~
+git clone <repo-url> whatstheweather
+cd whatstheweather
+```
+
+`config.yaml` prüfen/anpassen:
+
+```yaml
+debug: false
+interval: 7200
+# city: Wien    # Optional: überschreibt den per IP-Geolocation ermittelten Stadtnamen
+provisioning_ssid: "WeatherDisplay"
+provisioning_password: "weather123"
+```
+
+### 5. Systempakete & Python-Abhängigkeiten
 
 Die apt-Spiegelserver für Raspberry Pi OS sind gelegentlich inkonsistent
 (`raspbian.raspberrypi.com` liefert 404 auf Pakete, die `debian.anexia.at` hat).
@@ -98,8 +121,10 @@ pip3 install -r requirements.txt --break-system-packages
 ```
 
 `requirements.txt` enthält bereits: `Pillow`, `requests`, `PyYAML`, `smbus2`, `qrcode[pil]`.
+Fonts (`Inter-*.ttf`, `DejaVuSansMono*.ttf`) sind im Repo unter `fonts/` bereits enthalten —
+kein separater Download nötig.
 
-### 5. Waveshare e-Paper Treiber installieren
+### 6. Waveshare e-Paper Treiber installieren
 
 Nicht Teil von `requirements.txt` (kein PyPI-Standardpaket) — offizielles Waveshare-Repo:
 
@@ -116,7 +141,7 @@ Test (optional, HAT muss angeschlossen sein):
 python3 -c "from waveshare_epd import epd7in5_V2; print('OK')"
 ```
 
-### 6. WittyPi Software installieren
+### 7. WittyPi Software installieren
 
 Offizielles UUGear-Installationsskript ([Quelle](https://github.com/uugear/Witty-Pi-4)):
 
@@ -134,11 +159,14 @@ sudo ./wittyPi.sh
 ```
 
 Im Menü:
+
 1. **GPIO-Pin für SYS_UP ändern** auf GPIO 27 (siehe
    [UUGear-Anleitung](https://www.uugear.com/portfolio/change-the-pin-that-used-by-witty-pi/)) —
    behebt den Pin-17-Konflikt aus Schritt 1
 2. **"Startup when USB power is connected"** aktivieren — nötig für die Charger-Wake-Funktion
-   ([`docs/superpowers/specs/2026-07-02-charger-wake-design.md`](docs/superpowers/specs/2026-07-02-charger-wake-design.md))
+   ([`docs/superpowers/specs/2026-07-02-charger-wake-design.md`](docs/superpowers/specs/2026-07-02-charger-wake-design.md)).
+   Falls die Option im Menü fehlt, Firmware-Version prüfen (`cat ~/wittypi/firmware/version`)
+   und im WittyPi-4-L3V7-Handbuch den passenden `wittyPi.sh`-Befehl bzw. das I2C-Register nachschlagen.
 3. Schedule-Script laden:
    ```bash
    cp ~/whatstheweather/setup/schedule.wpi ~/wittypi/schedule.wpi
@@ -146,23 +174,6 @@ Im Menü:
    # Menüpunkt: Schedule Script laden/anwenden
    ```
    (2h-Zyklus: 5 Min. ON, 1h55 OFF — feste Slots ab 00:00)
-
-### 7. Projekt deployen
-
-```bash
-cd ~
-git clone <repo-url> whatstheweather
-cd whatstheweather
-```
-
-`config.yaml` prüfen/anpassen (SSID/Passwort für WLAN-Provisionierung, ggf. `city` override):
-
-```yaml
-debug: false
-interval: 7200
-provisioning_ssid: "WeatherDisplay"
-provisioning_password: "weather123"
-```
 
 ### 8. WiFi Connect (QR-Code-Provisionierung) installieren
 
@@ -182,7 +193,7 @@ sudo systemctl enable weather-display.service
 
 **`setup/weather-display.timer` NICHT aktivieren** — das ist ein Relikt aus der Zeit
 vor der WittyPi-Hardware-Steuerung. Der 2h-Zyklus läuft jetzt komplett über WittyPi's
-`schedule.wpi` (Schritt 6): WittyPi bootet den Pi, `weather-display.service` startet
+`schedule.wpi` (Schritt 7): WittyPi bootet den Pi, `weather-display.service` startet
 automatisch (`WantedBy=multi-user.target`), die App aktualisiert das Display und
 ruft selbst `sudo shutdown -h now` auf. WittyPi kappt danach den Strom.
 
@@ -206,6 +217,27 @@ Danach echten Boot-Zyklus testen:
 sudo systemctl start weather-display.service
 sudo journalctl -u weather-display.service -f
 ```
+
+Charger-Wake-Funktion end-to-end testen (siehe
+[`docs/superpowers/specs/2026-07-02-charger-wake-design.md`](docs/superpowers/specs/2026-07-02-charger-wake-design.md)):
+1. Pi normal herunterfahren: `sudo shutdown -h now`
+2. Warten bis die grüne Pi-LED aus ist
+3. Ladegerät einstecken
+4. Innerhalb von ~15s sollte der Pi booten (LED an)
+5. Innerhalb von ~60s sollte sich das Display aktualisieren
+6. Ladegerät abziehen → nach dem nächsten 2h-Poll ein letztes Update, dann Shutdown
+
+### Laufzeit-Dateien
+
+Die App legt zur Laufzeit auf dem Pi eigene State-/Log-Dateien im Home-Verzeichnis an
+(nicht Teil des Repos, kein manuelles Setup nötig):
+
+| Datei | Zweck |
+|-------|-------|
+| `~/.weather_cache.json` | Letzter erfolgreicher Wetter-Fetch (Fallback bei API-/Netzwerkfehler) |
+| `~/.weather_recharge` | Datum + Batterie-% des letzten Ladevorgangs (Off-Grid-Tage-Zähler) |
+| `~/.weather_battery_log.csv` | Ein Eintrag pro Boot: Timestamp, Batterie-V/%, USB-V, Charging |
+| `~/.weather_display.log` | Log-Datei im Produktionsmodus (Debug-Modus loggt nach stdout) |
 
 ### Bekannte Stolpersteine (aus der Praxis)
 
