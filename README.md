@@ -26,7 +26,7 @@ interaktive Pinout-Diagramm.
 
 **Wichtig — GPIO-17-Konflikt:** WittyPi's `SYS_UP`-Pin (Witty-Pin 11) und e-Paper `RST`
 wollen beide GPIO 17. Der `SYS_UP`-Jumper muss stattdessen auf **Pi Pin 13 (GPIO 27)**
-gesteckt und WittyPi per Menü auf das neue Pin umkonfiguriert werden (siehe Schritt 8,
+gesteckt und WittyPi per Menü auf das neue Pin umkonfiguriert werden (siehe Schritt 9,
 Menüpunkt "Change the GPIO pin used to detect system status"). Ohne diesen Schritt
 funktioniert entweder die Shutdown-Erkennung oder das Display nicht zuverlässig.
 
@@ -61,12 +61,23 @@ Beim Flashen der SD-Karte im Raspberry Pi Imager (Advanced Options / Zahnrad-Ico
 - Hostname: z.B. `weatherpi`
 - SSH aktivieren (Passwort- oder Key-Auth)
 - WLAN-Zugangsdaten für die **Erstinstallation** eintragen — 2.4GHz-Netz auswählen
-  (wird später ggf. durch die QR-Code-Provisionierung ersetzt/ergänzt, siehe Schritt 9)
+  (wird später ggf. durch die QR-Code-Provisionierung ersetzt/ergänzt, siehe Schritt 10)
 - Zeitzone: `Europe/Vienna`, Locale nach Bedarf
 
 Nach dem ersten Boot per SSH verbinden: `ssh pi@weatherpi.local`
 
-### 3. System-Interfaces aktivieren
+### 3. System aktualisieren
+
+Vor allem anderen: Paketindex und installierte Pakete auf den aktuellen Stand bringen
+(das Image kann Wochen/Monate alt sein — betrifft Kernel, Firmware, Sicherheitsupdates):
+
+```bash
+sudo apt update
+sudo apt full-upgrade -y
+sudo reboot
+```
+
+### 4. System-Interfaces aktivieren
 
 SPI (für e-Paper) und I2C (für WittyPi) müssen aktiviert sein:
 
@@ -86,21 +97,20 @@ i2cdetect -y 1   # sollte 0x08 (WittyPi MCU) zeigen
 
 > **Hinweis zur Uhrzeit/RTC:** WittyPi 4 L3V7 hat eine eigene RTC (PCF85063A), die
 > **nicht** über den Linux-Kernel-RTC-Mechanismus (`dtoverlay=i2c-rtc,...`) läuft,
-> sondern ausschließlich über die WittyPi-eigene Software (`wittyPi.sh`, Schritt 8)
+> sondern ausschließlich über die WittyPi-eigene Software (`wittyPi.sh`, Schritt 9)
 > per I2C-Protokoll mit der MCU kommuniziert. **Keinen** `i2c-rtc`-Overlay in
 > `/boot/firmware/config.txt` eintragen — das ist für ein separates DS3231-Modul
 > gedacht (Vorgänger-Hardware vor dem WittyPi-Upgrade) und kollidiert mit WittyPi.
 > `sudo hwclock -r` wird daher immer "Cannot access the
 > Hardware Clock" melden — das ist erwartet und kein Fehler. Die Zeit wird
-> stattdessen über NTP (System) und WittyPi's eigenen Sync (Schritt 8) korrekt gehalten.
+> stattdessen über NTP (System) und WittyPi's eigenen Sync (Schritt 9) korrekt gehalten.
 
-### 4. Basis-Softwarepakete installieren
+### 5. Basis-Softwarepakete installieren
 
 `python3` ist auf Raspberry Pi OS vorinstalliert — `git` und `pip3` **nicht**
 (zumindest nicht auf dem Lite-Image), daher zuerst per apt nachinstallieren:
 
 ```bash
-sudo apt update
 sudo apt install -y git python3-pip python3-smbus i2c-tools
 ```
 
@@ -109,9 +119,9 @@ Die apt-Spiegelserver für Raspberry Pi OS sind gelegentlich inkonsistent
 in der Praxis eher Pakete mit größerer Abhängigkeitskette wie `python3-pil`/`python3-qrcode`,
 kann aber jedes Paket treffen). Bei 404-Fehlern hilft `sudo apt update` erneut ausführen
 oder — bei Python-Paketen mit PyPI-Äquivalent — direkt auf `pip3 install ... --break-system-packages`
-ausweichen (siehe Schritt 6).
+ausweichen (siehe Schritt 7).
 
-### 5. Projekt deployen
+### 6. Projekt deployen
 
 ```bash
 cd ~
@@ -129,7 +139,7 @@ provisioning_ssid: "WeatherDisplay"
 provisioning_password: "weather123"
 ```
 
-### 6. Python-Abhängigkeiten installieren
+### 7. Python-Abhängigkeiten installieren
 
 ```bash
 cd ~/whatstheweather
@@ -140,7 +150,7 @@ pip3 install -r requirements.txt --break-system-packages
 Fonts (`Inter-*.ttf`, `DejaVuSansMono*.ttf`) sind im Repo unter `fonts/` bereits enthalten —
 kein separater Download nötig.
 
-### 7. Waveshare e-Paper Treiber installieren
+### 8. Waveshare e-Paper Treiber installieren
 
 Nicht Teil von `requirements.txt` (kein PyPI-Standardpaket) — offizielles Waveshare-Repo:
 
@@ -157,7 +167,7 @@ Test (optional, HAT muss angeschlossen sein):
 python3 -c "from waveshare_epd import epd7in5_V2; print('OK')"
 ```
 
-### 8. WittyPi Software installieren
+### 9. WittyPi Software installieren
 
 Offizielles UUGear-Installationsskript ([Quelle](https://github.com/uugear/Witty-Pi-4)):
 
@@ -180,7 +190,7 @@ Im Menü:
    [UUGear-Anleitung](https://www.uugear.com/portfolio/change-the-pin-that-used-by-witty-pi/)) —
    behebt den Pin-17-Konflikt aus Schritt 1
 2. **"Startup when USB power is connected"** aktivieren — nötig für die Charger-Wake-Funktion
-   (Pi bootet automatisch, sobald ein Ladegerät angeschlossen wird, siehe Verifikation in Schritt 11).
+   (Pi bootet automatisch, sobald ein Ladegerät angeschlossen wird, siehe Verifikation in Schritt 12).
    Falls die Option im Menü fehlt, Firmware-Version prüfen (`cat ~/wittypi/firmware/version`)
    und im WittyPi-4-L3V7-Handbuch den passenden `wittyPi.sh`-Befehl bzw. das I2C-Register nachschlagen.
 3. Schedule-Script laden:
@@ -191,7 +201,7 @@ Im Menü:
    ```
    (2h-Zyklus: 5 Min. ON, 1h55 OFF — feste Slots ab 00:00)
 
-### 9. WiFi Connect (QR-Code-Provisionierung) installieren
+### 10. WiFi Connect (QR-Code-Provisionierung) installieren
 
 Für den Fall, dass die App beim Boot kein bekanntes WLAN findet:
 
@@ -199,7 +209,7 @@ Für den Fall, dass die App beim Boot kein bekanntes WLAN findet:
 sudo bash setup/install_wifi_connect.sh
 ```
 
-### 10. systemd-Service einrichten
+### 11. systemd-Service einrichten
 
 ```bash
 sudo cp setup/weather-display.service /etc/systemd/system/
@@ -209,11 +219,11 @@ sudo systemctl enable weather-display.service
 
 **`setup/weather-display.timer` NICHT aktivieren** — das ist ein Relikt aus der Zeit
 vor der WittyPi-Hardware-Steuerung. Der 2h-Zyklus läuft jetzt komplett über WittyPi's
-`schedule.wpi` (Schritt 8): WittyPi bootet den Pi, `weather-display.service` startet
+`schedule.wpi` (Schritt 9): WittyPi bootet den Pi, `weather-display.service` startet
 automatisch (`WantedBy=multi-user.target`), die App aktualisiert das Display und
 ruft selbst `sudo shutdown -h now` auf. WittyPi kappt danach den Strom.
 
-### 11. Verifikation
+### 12. Verifikation
 
 Manueller Testlauf (kein automatischer Shutdown im Debug-Modus):
 
@@ -226,7 +236,7 @@ Prüfen:
 - Keine `ModuleNotFoundError` (qrcode, waveshare_epd, smbus2)
 - Standort/Wetterdaten werden geladen
 - `preview.png` wird erzeugt, Frage "Display aktualisieren? [j/N]" — mit `j` bestätigen
-- Display zeigt aktuelles Datum/Uhrzeit korrekt an (siehe Zeit-Hinweis in Schritt 3)
+- Display zeigt aktuelles Datum/Uhrzeit korrekt an (siehe Zeit-Hinweis in Schritt 4)
 
 Danach echten Boot-Zyklus testen:
 ```bash
@@ -261,8 +271,8 @@ Die App legt zur Laufzeit auf dem Pi eigene State-/Log-Dateien im Home-Verzeichn
   Alternative: `python3 -m src.main --debug` aus dem Projekt-Root.
 - **apt 404 auf `raspbian.raspberrypi.com`** — Mirror-Sync-Lücke, kein Warten hilft;
   stattdessen `pip3 install ... --break-system-packages`.
-- **`FileNotFoundError` bei `SPI.open(0, 0)`** — SPI nicht aktiviert (Schritt 3).
-- **`hwclock: Cannot access the Hardware Clock`** — erwartet, siehe Hinweis in Schritt 3.
+- **`FileNotFoundError` bei `SPI.open(0, 0)`** — SPI nicht aktiviert (Schritt 4).
+- **`hwclock: Cannot access the Hardware Clock`** — erwartet, siehe Hinweis in Schritt 4.
 - **Service killt die SSH-Session während der Fehlersuche** — `main.py` ruft im
   Normalbetrieb `sudo shutdown -h now` auf. Vor manuellen Debugging-Sessions:
   ```bash
