@@ -282,6 +282,17 @@ vor der WittyPi-Hardware-Steuerung. Der 2h-Zyklus läuft jetzt komplett über Wi
 automatisch (`WantedBy=multi-user.target`), die App aktualisiert das Display und
 ruft selbst `sudo shutdown -h now` auf. WittyPi kappt danach den Strom.
 
+> **`TimeoutStartSec=180` im Service:** Das Standard-Schedule (Schritt 9) sieht ein
+> 5-Minuten-ON-Fenster vor. Alle Netzwerk-Requests der App haben zwar eigene Timeouts
+> (max. ~230s im theoretischen Worst-Case, siehe `src/location.py`/`src/weather.py`),
+> aber `TimeoutStartSec` ist eine unabhängige, zweite Absicherung auf systemd-Ebene:
+> Läuft der `oneshot`-Dienst trotzdem länger als 180s (z.B. wegen eines unvorhergesehenen
+> Hängers außerhalb der abgesicherten Requests), killt systemd den Prozess zwangsweise.
+> Der Pi bleibt dadurch nicht unbegrenzt aktiv über das ON-Fenster hinaus — WittyPi's
+> eigener, softwaregesteuerter Shutdown-Mechanismus (`daemon.sh`/`beforeShutdown.sh`,
+> derselbe saubere Ablauf wie bei manuellem `sudo shutdown -h now`) greift danach
+> zuverlässig als Fallback.
+
 ### 12. Verifikation
 
 Manueller Testlauf (kein automatischer Shutdown im Debug-Modus):
