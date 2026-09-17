@@ -6,13 +6,12 @@ set -euo pipefail
 
 ARCH=$(uname -m)
 case "$ARCH" in
-  armv6l)  TARBALL="wifi-connect-armv6l.tar.gz" ;;
-  armv7l)  TARBALL="wifi-connect-armv7hf.tar.gz" ;;
-  aarch64) TARBALL="wifi-connect-aarch64.tar.gz" ;;
+  armv7l)  TARBALL="wifi-connect-armv7-unknown-linux-gnueabihf.tar.gz" ;;
+  aarch64) TARBALL="wifi-connect-aarch64-unknown-linux-gnu.tar.gz" ;;
   *)       echo "Unsupported architecture: $ARCH"; exit 1 ;;
 esac
 
-BASE_URL="https://github.com/balena-io/wifi-connect/releases/latest/download"
+BASE_URL="https://github.com/balena-os/wifi-connect/releases/latest/download"
 TMP=$(mktemp -d)
 
 echo "Downloading $TARBALL..."
