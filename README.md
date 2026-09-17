@@ -231,34 +231,63 @@ cd ~/wittypi
 sudo ./wittyPi.sh
 ```
 
+> **LiPo-Batterie jetzt anschließen, falls noch nicht geschehen:** WittyPis eigene RTC
+> und MCU werden aus derselben Quelle versorgt wie der Pi (USB oder Batterie) — es gibt
+> keinen unabhängigen Backup-Stromkreis außer einem winzigen Kondensator für Sekunden.
+> Läuft WittyPi nur an USB und das Kabel wird kurz getrennt (z.B. beim Charger-Wake-Test
+> in Schritt 12), verliert die RTC für die Dauer der Trennung ihre Genauigkeit (bestätigt:
+> ~118s Drift nach ~67 Minuten ohne Batterie, mit Batterie danach nur noch ~3s Drift über
+> denselben Zeitraum). Das beschädigt nichts, macht aber den späteren Zeitplan (Schritt 9.3)
+> unzuverlässig. Sobald die Batterie dauerhaft angeschlossen ist, bleiben RTC und MCU auch
+> bei USB-Verlust durchgehend versorgt (nahtloser Quellwechsel) — das ist ohnehin für den
+> Off-Grid-Betrieb notwendig, siehe Hardware-Liste oben.
+
 Im Menü:
 
-1. **GPIO-Pin für SYS_UP ändern** auf GPIO 27 (siehe
-   [UUGear-Anleitung](https://www.uugear.com/portfolio/change-the-pin-that-used-by-witty-pi/)) —
-   behebt den Pin-17-Konflikt aus Schritt 1
-2. **"Startup when USB power is connected"** aktivieren — nötig für die Charger-Wake-Funktion
-   (Pi bootet automatisch, sobald ein Ladegerät angeschlossen wird, siehe Verifikation in Schritt 12).
-   Falls die Option im Menü fehlt, Firmware-Version prüfen (`cat ~/wittypi/firmware/version`)
-   und im WittyPi-4-L3V7-Handbuch den passenden `wittyPi.sh`-Befehl bzw. das I2C-Register nachschlagen.
-3. Schedule-Script laden:
+1. **GPIO-Pin für SYS_UP ändern** auf GPIO 27 — behebt den Pin-17-Konflikt aus Schritt 1.
+   In WittyPi-Software 4.23 gibt es dafür **keinen Menüpunkt** (anders als in der
+   [UUGear-Anleitung](https://www.uugear.com/portfolio/change-the-pin-that-used-by-witty-pi/)
+   beschrieben) — der Pin ist in `~/wittypi/utilities.sh` hart einprogrammiert. Stattdessen
+   direkt patchen:
    ```bash
-   cp ~/whatstheweather/setup/schedule.wpi ~/wittypi/schedule.wpi
+   sudo sed -i 's/readonly SYSUP_PIN=17/readonly SYSUP_PIN=27/' ~/wittypi/utilities.sh
+   grep -n "SYSUP_PIN" ~/wittypi/utilities.sh   # zur Kontrolle: sollte =27 zeigen
+   ```
+   Falls eine neuere WittyPi-Version tatsächlich einen Menüpunkt dafür hat, den bevorzugen —
+   sonst Firmware-/Softwareversion prüfen (`~/wittypi/wittyPi.sh` Kopfzeile zeigt die Version)
+   und im WittyPi-4-L3V7-Handbuch nachschlagen.
+2. **"Auto-On when USB 5V is connected"** aktivieren (Menüpunkt im Hauptmenü, nicht in den
+   Untermenüs) — nötig für die Charger-Wake-Funktion (Pi bootet automatisch, sobald ein
+   Ladegerät angeschlossen wird, siehe Verifikation in Schritt 12). Ist oft bereits
+   standardmäßig `[Yes]` — im Hauptmenü prüfen, bevor man danach sucht.
+3. **Zeit synchronisieren** (Menüpunkt 1 oder 3 im Hauptmenü) — RTC-Drift kann sich zwischen
+   Sessions ansammeln (siehe Kasten oben), vor dem nächsten Schritt einmal frisch syncen.
+4. Schedule-Script laden — **wichtig:** Das Hauptmenü (Menüpunkt 6, "Choose schedule
+   script") listet nur Dateien aus `~/wittypi/schedules/`, nicht `~/wittypi/schedule.wpi`
+   direkt. Ein einfaches `cp ... ~/wittypi/schedule.wpi` reicht **nicht** — die Datei liegt
+   dann zwar am richtigen Ort, wird aber nie *ausgeführt* (RTC-Alarme werden nicht gesetzt).
+   Stattdessen ins `schedules/`-Verzeichnis kopieren und über das Menü auswählen, damit
+   `wittyPi.sh` das Script tatsächlich anwendet:
+   ```bash
+   cp ~/whatstheweather/setup/schedule.wpi ~/wittypi/schedules/weatherpi.wpi
    sudo ./wittyPi.sh
-   # Menüpunkt: Schedule Script laden/anwenden
+   # Menüpunkt 6 ("Choose schedule script") → Nummer von "weatherpi.wpi" wählen
    ```
    (2h-Zyklus: 5 Min. ON, 1h55 OFF — feste Slots ab 00:00)
 
-   > **Wichtig — Schedule-Script erst ganz am Ende aktivieren:** Sobald das
-   > Schedule-Script angewendet wird, berechnet WittyPi sofort den nächsten
-   > Shutdown-Zeitpunkt und kappt dann zuverlässig die Stromversorgung — auch
-   > mitten in einer laufenden SSH-Session oder während weiterer Setup-Schritte
-   > (WiFi-Connect, systemd-Service, Verifikation). Ein unsauberer Abbruch
-   > mitten in einem laufenden `apt`/Deployment-Vorgang kann dieselbe Art von
-   > Schaden anrichten wie ein `sudo reboot` (siehe Stolperstein weiter unten) —
-   > FAT32-Boot-Partition-Korruption. Erst Zeit synchronisieren (Menüpunkt 1)
-   > und danach mit den restlichen Schritten (10–12) fortfahren; das
-   > Schedule-Script erst laden/aktivieren, wenn alles andere fertig
-   > eingerichtet ist und ein Shutdown zu jedem Zeitpunkt unproblematisch wäre.
+   > **Wann WittyPi tatsächlich abschaltet:** Nach Auswahl zeigt `wittyPi.sh` sofort den
+   > berechneten nächsten Shutdown-/Startup-Zeitpunkt an (z.B. "Schedule next shutdown at:
+   > ..."). WittyPi berechnet dabei den **nächsten zukünftigen** Grid-Übergang ab dem
+   > aktuellen Zeitpunkt — läuft der Pi gerade außerhalb eines geplanten ON-Fensters (z.B.
+   > weil man mitten im Setup manuell eingeloggt ist), erzwingt die Aktivierung **keinen**
+   > sofortigen Shutdown, sondern lässt den Pi bis zum nächsten passenden Zeitpunkt
+   > weiterlaufen. Diese Zeile vor dem Fortfahren trotzdem immer lesen und plausibilisieren
+   > (steht sie z.B. auf "in wenigen Sekunden", lieber abbrechen und Grid-Berechnung prüfen).
+   > Der eigentliche Shutdown selbst läuft dann softwaregesteuert über `daemon.sh` /
+   > `beforeShutdown.sh` — derselbe saubere Mechanismus wie bei manuellem
+   > `sudo shutdown -h now` (siehe `TimeoutStartSec` in Schritt 11 für eine zusätzliche
+   > Absicherung gegen einen hängenden App-Lauf). Deshalb: Schedule-Script trotzdem erst
+   > aktivieren, wenn alle anderen Schritte (10–12) fertig eingerichtet und getestet sind.
 
 ### 10. WiFi Connect (QR-Code-Provisionierung) installieren
 
