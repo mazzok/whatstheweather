@@ -7,9 +7,15 @@ import pytest
 
 @pytest.fixture
 def mock_smbus():
-    """Patch smbus2 so tests run without I2C hardware."""
+    """Patch smbus2 and the wiringpi `gpio` CLI so tests run without hardware.
+
+    subprocess.run raises FileNotFoundError by default (as if `gpio` isn't
+    installed), exercising is_charging()'s Vout-heuristic fallback path.
+    Tests that want the primary GPIO-pin path override this locally.
+    """
     mock_bus = MagicMock()
-    with patch("src.wittypi.SMBus", return_value=mock_bus):
+    with patch("src.wittypi.SMBus", return_value=mock_bus), \
+         patch("src.wittypi.subprocess.run", side_effect=FileNotFoundError("gpio not installed")):
         yield mock_bus
 
 
@@ -80,25 +86,30 @@ class TestBatteryPercentage:
 
 
 class TestIsCharging:
-    def test_usb_connected(self, wittypi, mock_smbus):
+    def test_gpio_low_means_charging(self, wittypi, mock_smbus):
+        with patch("src.wittypi.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(stdout="0\n")
+            assert wittypi.is_charging() is True
+
+    def test_gpio_high_means_not_charging(self, wittypi, mock_smbus):
+        with patch("src.wittypi.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(stdout="1\n")
+            assert wittypi.is_charging() is False
+
+    def test_falls_back_to_vout_heuristic_when_gpio_unavailable(self, wittypi, mock_smbus):
+        # mock_smbus's default patch already makes `gpio` raise FileNotFoundError
         mock_smbus.read_byte_data.side_effect = lambda addr, reg: {
             0x03: 5, 0x04: 10,
         }.get(reg, 0)
         assert wittypi.is_charging() is True
 
-    def test_usb_disconnected(self, wittypi, mock_smbus):
+    def test_fallback_not_charging_when_vout_low(self, wittypi, mock_smbus):
         mock_smbus.read_byte_data.side_effect = lambda addr, reg: {
             0x03: 0, 0x04: 0,
         }.get(reg, 0)
         assert wittypi.is_charging() is False
 
-    def test_usb_at_threshold(self, wittypi, mock_smbus):
-        mock_smbus.read_byte_data.side_effect = lambda addr, reg: {
-            0x03: 4, 0x04: 0,
-        }.get(reg, 0)
-        assert wittypi.is_charging() is False
-
-    def test_fallback_not_charging(self, wittypi, mock_smbus):
+    def test_fallback_not_charging_on_i2c_error(self, wittypi, mock_smbus):
         mock_smbus.read_byte_data.side_effect = OSError("I2C error")
         assert wittypi.is_charging() is False
 

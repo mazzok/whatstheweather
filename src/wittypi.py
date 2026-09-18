@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import subprocess
 from datetime import date, datetime
 from pathlib import Path
 
@@ -14,8 +15,15 @@ I2C_BUS = 1
 
 REG_BATTERY_V_INT = 0x01
 REG_BATTERY_V_DEC = 0x02
+# Registers 0x03/0x04 report Vout (WittyPi's regulated 5V rail to the Pi), not the raw
+# external USB input — Vout stays ~5.2V whenever the Pi is powered, from either source.
 REG_USB_V_INT = 0x03
 REG_USB_V_DEC = 0x04
+
+# L3V7-only: dedicated GPIO input from the charge-management IC (see
+# ~/wittypi/utilities.sh). Pulled low while actively charging, high (via internal
+# pull-up) otherwise — this is the actual charging signal, unlike the Vout reading above.
+CHRG_PIN = 5
 
 try:
     from smbus2 import SMBus
@@ -76,7 +84,23 @@ class WittyPi:
         return max(0, min(100, pct))
 
     def is_charging(self) -> bool:
-        return self.usb_voltage() > self.USB_CHARGING_THRESHOLD
+        try:
+            subprocess.run(
+                ["gpio", "-g", "mode", str(CHRG_PIN), "up"],
+                check=True, capture_output=True, timeout=5,
+            )
+            subprocess.run(
+                ["gpio", "-g", "mode", str(CHRG_PIN), "in"],
+                check=True, capture_output=True, timeout=5,
+            )
+            result = subprocess.run(
+                ["gpio", "-g", "read", str(CHRG_PIN)],
+                check=True, capture_output=True, text=True, timeout=5,
+            )
+            return result.stdout.strip() == "0"
+        except Exception as e:
+            logger.debug("GPIO read error (CHRG_PIN): %s — falling back to Vout heuristic", e)
+            return self.usb_voltage() > self.USB_CHARGING_THRESHOLD
 
     def get_off_grid_days(self) -> int:
         current_pct = self.battery_percentage()
