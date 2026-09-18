@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import shlex
 import subprocess
 from datetime import date, datetime
 from pathlib import Path
@@ -32,6 +33,15 @@ except ImportError:
 
 DEFAULT_RECHARGE_PATH = Path.home() / ".weather_recharge"
 DEFAULT_BOOT_LOG_PATH = Path.home() / ".weather_battery_log.csv"
+DEFAULT_WITTYPI_DIR = Path.home() / "wittypi"
+
+# Deployed schedule filenames under <wittypi_dir>/schedules/ (see README setup step 9).
+# SCHEDULE_NORMAL_NAME enforces WittyPi's own hard shutdown after the ON window — the
+# safety backstop for battery-only operation. SCHEDULE_CHARGING_NAME uses the WAIT
+# modifier so WittyPi does NOT auto-shutdown; the app stays awake and is responsible
+# for calling shutdown itself once charging stops (see _run_charging_mode in main.py).
+SCHEDULE_NORMAL_NAME = "weatherpi.wpi"
+SCHEDULE_CHARGING_NAME = "weatherpi-charging.wpi"
 
 
 class WittyPi:
@@ -43,9 +53,11 @@ class WittyPi:
         self,
         recharge_path: Path = DEFAULT_RECHARGE_PATH,
         boot_log_path: Path = DEFAULT_BOOT_LOG_PATH,
+        wittypi_dir: Path = DEFAULT_WITTYPI_DIR,
     ) -> None:
         self._recharge_path = recharge_path
         self._boot_log_path = boot_log_path
+        self._wittypi_dir = wittypi_dir
         self._bus = None
         try:
             if SMBus is None:
@@ -101,6 +113,57 @@ class WittyPi:
         except Exception as e:
             logger.debug("GPIO read error (CHRG_PIN): %s — falling back to Vout heuristic", e)
             return self.usb_voltage() > self.USB_CHARGING_THRESHOLD
+
+    def _apply_schedule(self, schedule_name: str) -> bool:
+        """Copy <wittypi_dir>/schedules/<schedule_name> to <wittypi_dir>/schedule.wpi
+        and re-source runScript.sh to recompute/arm the RTC alarms — the same two
+        steps wittyPi.sh's "Choose schedule script" menu option performs internally.
+        Never raises; logs and returns False on failure so a broken/missing WittyPi
+        install doesn't crash the app (updating the display is the primary job)."""
+        src = self._wittypi_dir / "schedules" / schedule_name
+        dest = self._wittypi_dir / "schedule.wpi"
+        try:
+            subprocess.run(
+                ["sudo", "cp", str(src), str(dest)],
+                check=True, capture_output=True, timeout=10,
+            )
+            subprocess.run(
+                ["sudo", "bash", "-c",
+                 f"cd {shlex.quote(str(self._wittypi_dir))} && . ./runScript.sh"],
+                check=True, capture_output=True, timeout=30,
+            )
+            logger.info("Applied WittyPi schedule: %s", schedule_name)
+            return True
+        except Exception as e:
+            logger.warning("Failed to apply WittyPi schedule %s: %s", schedule_name, e)
+            return False
+
+    def reconcile_schedule(self) -> bool:
+        """Idempotently ensure <wittypi_dir>/schedule.wpi matches the schedule
+        appropriate for the current charging state: charging -> the WAIT variant
+        that suppresses WittyPi's own hard shutdown, letting the app stay awake;
+        not charging -> the hard grid, WittyPi's shutdown backstop for battery-only
+        operation. Safe and cheap to call on every boot in every code path
+        (debug/charging/normal) — self-heals a schedule left in the wrong state by
+        a crash mid-session. Skips the actual apply when the correct file is
+        already active, to avoid needless RTC-alarm recomputation on every routine
+        boot. Never raises."""
+        charging = self.is_charging()
+        target_name = SCHEDULE_CHARGING_NAME if charging else SCHEDULE_NORMAL_NAME
+        target_src = self._wittypi_dir / "schedules" / target_name
+        dest = self._wittypi_dir / "schedule.wpi"
+        logger.info("Reconciling WittyPi schedule: charging=%s -> target=%s", charging, target_name)
+        try:
+            result = subprocess.run(
+                ["sudo", "diff", "-q", str(target_src), str(dest)],
+                capture_output=True, timeout=10,
+            )
+            if result.returncode == 0:
+                logger.info("Schedule already matches %s — skipping apply", target_name)
+                return True
+        except Exception as e:
+            logger.info("Could not compare schedule files (%s) — will attempt apply", e)
+        return self._apply_schedule(target_name)
 
     def get_off_grid_days(self) -> int:
         current_pct = self.battery_percentage()

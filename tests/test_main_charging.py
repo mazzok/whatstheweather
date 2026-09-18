@@ -91,3 +91,39 @@ class TestRunChargingMode:
         # 2 in-loop + 1 final
         assert mock_run_once.call_count == 3
         assert mock_sleep.call_count == 2
+
+    @patch("src.main.run_once")
+    @patch("src.main.time.sleep")
+    def test_reconcile_schedule_called_once_on_charger_removal(self, mock_sleep, mock_run_once):
+        """The hard grid schedule is restored exactly once when the charger goes away."""
+        from src.main import _run_charging_mode
+
+        wittypi = MagicMock()
+        wittypi.is_charging.side_effect = [True, True, False]
+        wittypi.battery_percentage.return_value = 75
+        wittypi.get_off_grid_days.return_value = 0
+
+        _run_charging_mode({"interval": 60}, wittypi)
+
+        assert wittypi.reconcile_schedule.call_count == 1
+
+    @patch("src.main.time.sleep")
+    def test_reconcile_schedule_called_before_final_run_once(self, mock_sleep):
+        """reconcile_schedule() must run before the risky final run_once/shutdown step."""
+        from src.main import _run_charging_mode
+
+        wittypi = MagicMock()
+        wittypi.is_charging.side_effect = [True, True, False]
+        wittypi.battery_percentage.return_value = 75
+        wittypi.get_off_grid_days.return_value = 0
+
+        manager = MagicMock()
+        manager.attach_mock(wittypi.reconcile_schedule, "reconcile_schedule")
+        with patch("src.main.run_once") as mock_run_once:
+            manager.attach_mock(mock_run_once, "run_once")
+            _run_charging_mode({"interval": 60}, wittypi)
+
+        call_names = [c[0] for c in manager.mock_calls]
+        reconcile_index = call_names.index("reconcile_schedule")
+        last_run_once_index = max(i for i, name in enumerate(call_names) if name == "run_once")
+        assert reconcile_index < last_run_once_index

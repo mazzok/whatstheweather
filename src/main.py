@@ -109,6 +109,7 @@ def _run_charging_mode(config: dict, wittypi: WittyPi) -> None:
             time.sleep(min(60, remaining))
             remaining -= 60
     logger.info("Charger removed — final update, shutting down")
+    wittypi.reconcile_schedule()
     battery_pct = wittypi.battery_percentage()
     off_grid_days = wittypi.get_off_grid_days()
     run_once(config, battery_pct, off_grid_days)
@@ -136,6 +137,7 @@ def main() -> None:
 
     wittypi = WittyPi()
     wittypi.log_boot()
+    wittypi.reconcile_schedule()
 
     if config["debug"]:
         while True:

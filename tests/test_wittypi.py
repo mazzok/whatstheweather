@@ -1,4 +1,5 @@
 import json
+import subprocess
 from datetime import date, timedelta
 from unittest.mock import MagicMock, patch
 
@@ -219,3 +220,77 @@ class TestLogBoot:
         )
         # Should not raise
         wp.log_boot()
+
+
+def _cmd_matcher(diff_result=0, cp_ok=True, runscript_ok=True):
+    """Build a subprocess.run side_effect that dispatches on which WittyPi
+    schedule command is being invoked, based on the argv list's contents."""
+    def side_effect(cmd, **kwargs):
+        if "diff" in cmd:
+            return MagicMock(returncode=diff_result)
+        if "cp" in cmd:
+            if not cp_ok:
+                raise subprocess.CalledProcessError(1, cmd)
+            return MagicMock(returncode=0)
+        if any("runScript.sh" in part for part in cmd):
+            if not runscript_ok:
+                raise subprocess.CalledProcessError(1, cmd)
+            return MagicMock(returncode=0)
+        raise AssertionError(f"unexpected subprocess command: {cmd}")
+    return side_effect
+
+
+class TestScheduleReconciliation:
+    def test_apply_schedule_success(self, wittypi):
+        with patch("src.wittypi.subprocess.run", side_effect=_cmd_matcher()) as mock_run:
+            assert wittypi._apply_schedule("weatherpi.wpi") is True
+        cp_call = next(c for c in mock_run.call_args_list if "cp" in c.args[0])
+        assert str(wittypi._wittypi_dir / "schedules" / "weatherpi.wpi") in cp_call.args[0]
+        assert str(wittypi._wittypi_dir / "schedule.wpi") in cp_call.args[0]
+        run_call = next(c for c in mock_run.call_args_list if "bash" in c.args[0])
+        assert "runScript.sh" in run_call.args[0][-1]
+
+    def test_apply_schedule_cp_failure_returns_false(self, wittypi):
+        with patch("src.wittypi.subprocess.run", side_effect=_cmd_matcher(cp_ok=False)):
+            assert wittypi._apply_schedule("weatherpi.wpi") is False
+
+    def test_apply_schedule_runscript_failure_returns_false(self, wittypi):
+        with patch("src.wittypi.subprocess.run", side_effect=_cmd_matcher(runscript_ok=False)):
+            assert wittypi._apply_schedule("weatherpi.wpi") is False
+
+    def test_reconcile_schedule_applies_charging_schedule_when_charging(self, wittypi):
+        with patch("src.wittypi.subprocess.run", side_effect=_cmd_matcher(diff_result=1)) as mock_run:
+            with patch.object(wittypi, "is_charging", return_value=True):
+                assert wittypi.reconcile_schedule() is True
+        cp_call = next(c for c in mock_run.call_args_list if "cp" in c.args[0])
+        assert "weatherpi-charging.wpi" in cp_call.args[0][2]
+
+    def test_reconcile_schedule_applies_normal_schedule_when_not_charging(self, wittypi):
+        with patch("src.wittypi.subprocess.run", side_effect=_cmd_matcher(diff_result=1)) as mock_run:
+            with patch.object(wittypi, "is_charging", return_value=False):
+                assert wittypi.reconcile_schedule() is True
+        cp_call = next(c for c in mock_run.call_args_list if "cp" in c.args[0])
+        assert cp_call.args[0][2].endswith("weatherpi.wpi")
+        assert "charging" not in cp_call.args[0][2]
+
+    def test_reconcile_schedule_skips_apply_when_already_matching(self, wittypi):
+        with patch("src.wittypi.subprocess.run", side_effect=_cmd_matcher(diff_result=0)) as mock_run:
+            with patch.object(wittypi, "is_charging", return_value=True):
+                assert wittypi.reconcile_schedule() is True
+        assert len(mock_run.call_args_list) == 1
+        assert "diff" in mock_run.call_args_list[0].args[0]
+
+    def test_reconcile_schedule_attempts_apply_when_diff_errors(self, wittypi):
+        with patch("src.wittypi.subprocess.run", side_effect=_cmd_matcher(diff_result=2)) as mock_run:
+            with patch.object(wittypi, "is_charging", return_value=False):
+                assert wittypi.reconcile_schedule() is True
+        assert any("cp" in c.args[0] for c in mock_run.call_args_list)
+
+    def test_reconcile_schedule_never_raises_on_unexpected_error(self, wittypi):
+        def raise_timeout(cmd, **kwargs):
+            raise TimeoutError("boom")
+
+        with patch("src.wittypi.subprocess.run", side_effect=raise_timeout):
+            with patch.object(wittypi, "is_charging", return_value=False):
+                result = wittypi.reconcile_schedule()
+        assert result is False

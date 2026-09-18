@@ -288,6 +288,27 @@ Im Menü:
    > `sudo shutdown -h now` (siehe `TimeoutStartSec` in Schritt 11 für eine zusätzliche
    > Absicherung gegen einen hängenden App-Lauf). Deshalb: Schedule-Script trotzdem erst
    > aktivieren, wenn alle anderen Schritte (10–12) fertig eingerichtet und getestet sind.
+   >
+   > **Ausnahme beim Laden:** Solange ein Ladegerät angeschlossen ist, tauscht die App das
+   > aktive `schedule.wpi` zur Laufzeit selbst gegen eine Variante mit dem `WAIT`-Modifier
+   > aus (`setup/schedule-charging.wpi`, deployt als `weatherpi-charging.wpi` — siehe
+   > Unterschritt unten). `WAIT` unterdrückt WittyPi's automatischen Shutdown am Ende des
+   > ON-Fensters; der Pi bleibt dann so lange wach, wie geladen wird, und aktualisiert alle
+   > `interval`-Sekunden. Die App ist in diesem Zustand selbst für den Shutdown zuständig
+   > (`src/wittypi.py`'s `reconcile_schedule()`/`_apply_schedule()`). Sobald der Charger
+   > entfernt wird, stellt die App **vor** dem finalen Update+Shutdown sofort das normale,
+   > harte Grid wieder her (nicht erst beim nächsten Boot) — falls der finale Schritt selbst
+   > hängen sollte, bleibt WittyPi's Hardware-Backstop trotzdem aktiv. Zusätzlich gleicht die
+   > App diesen Zustand bei **jedem** Boot (auch im `--debug`-Modus) defensiv neu ab, sodass
+   > ein Crash mitten in einer Ladesession sich beim nächsten Boot selbst heilt.
+
+4a. Charging-Schedule-Variante deployen (einmalig, **nicht** über das `wittyPi.sh`-Menü
+    auswählen — das würde sie sofort aktiv setzen und den Hardware-Backstop von Anfang an
+    deaktivieren):
+    ```bash
+    cp ~/whatstheweather/setup/schedule-charging.wpi ~/wittypi/schedules/weatherpi-charging.wpi
+    ```
+    Die App aktiviert sie automatisch zur Laufzeit, sobald sie erstmals Laden erkennt.
 
 ### 10. WiFi Connect (QR-Code-Provisionierung) installieren
 
@@ -311,16 +332,25 @@ vor der WittyPi-Hardware-Steuerung. Der 2h-Zyklus läuft jetzt komplett über Wi
 automatisch (`WantedBy=multi-user.target`), die App aktualisiert das Display und
 ruft selbst `sudo shutdown -h now` auf. WittyPi kappt danach den Strom.
 
-> **`TimeoutStartSec=180` im Service:** Das Standard-Schedule (Schritt 9) sieht ein
-> 5-Minuten-ON-Fenster vor. Alle Netzwerk-Requests der App haben zwar eigene Timeouts
-> (max. ~230s im theoretischen Worst-Case, siehe `src/location.py`/`src/weather.py`),
-> aber `TimeoutStartSec` ist eine unabhängige, zweite Absicherung auf systemd-Ebene:
-> Läuft der `oneshot`-Dienst trotzdem länger als 180s (z.B. wegen eines unvorhergesehenen
-> Hängers außerhalb der abgesicherten Requests), killt systemd den Prozess zwangsweise.
-> Der Pi bleibt dadurch nicht unbegrenzt aktiv über das ON-Fenster hinaus — WittyPi's
-> eigener, softwaregesteuerter Shutdown-Mechanismus (`daemon.sh`/`beforeShutdown.sh`,
-> derselbe saubere Ablauf wie bei manuellem `sudo shutdown -h now`) greift danach
-> zuverlässig als Fallback.
+> **`TimeoutStartSec=86400` im Service:** Bei `Type=oneshot` deckt `TimeoutStartSec` die
+> **gesamte** Prozesslaufzeit ab, nicht nur einen einzelnen Durchlauf. Solange geladen
+> wird, läuft der Prozess bewusst stundenlang im `_run_charging_mode`-Loop (siehe
+> Charging-Ausnahme in Schritt 9) — ein knapper Wert wie die früher hier verwendeten 180s
+> hätte diesen Loop nach 3 Minuten immer zwangsweise gekillt und das Wach-bleiben-beim-Laden
+> unmöglich gemacht. 86400s (24h) ist großzügig genug für jede realistische Ladesession,
+> bleibt aber ein Backstop gegen einen wirklich durchgedrehten Prozess (z.B. dauerhaft
+> falsch-positives `is_charging()`). Für den **Batteriebetrieb ohne Charger** ist dieser
+> Wert kein enger Sicherheitsnetz mehr — dort tragen stattdessen die Request-Timeouts der
+> App (max. ~230s Worst-Case, siehe `src/location.py`/`src/weather.py`) und WittyPi's
+> eigener, softwaregesteuerter Shutdown-Mechanismus (`daemon.sh`/`beforeShutdown.sh`, über
+> das harte, nicht-`WAIT`-Grid aus Schritt 9) die Absicherung. Restrisiko: Ein
+> Timeout-Kill durch systemd fährt den Pi nicht selbst herunter, er beendet nur den
+> Prozess — bewusster Kompromiss, kein vollständiger Fix.
+>
+> Die neuen `sudo cp`/`sudo bash -c '... runScript.sh'`-Aufrufe in `reconcile_schedule()`
+> setzen passwortloses `sudo` für den `pi`-User voraus — genau wie das bereits bestehende
+> `sudo shutdown -h now`. Das ist auf Raspberry Pi OS standardmäßig für den `pi`-User so
+> konfiguriert, ohne dass dafür ein separater Setup-Schritt nötig ist.
 
 ### 12. Verifikation
 
@@ -420,3 +450,12 @@ Die App legt zur Laufzeit auf dem Pi eigene State-/Log-Dateien im Home-Verzeichn
   langer Ordnereintrag" oder wiederhergestellte "verlorene Ketten", ist das die
   Bestätigung. Repariert werden kann die Boot-Partition selbst nicht zuverlässig —
   SD-Karte neuflashen.
+- **Pi bleibt dauerhaft wach, obwohl das Ladegerät entfernt wurde** — prüfen, ob
+  `_run_charging_mode` das Laden noch fälschlich erkennt: `cat ~/.weather_display.log`
+  nach `Reconciling WittyPi schedule`/`Charger removed` durchsuchen, GPIO5 direkt lesen
+  (`gpio -g read 5` — `1` erwartet bei "lädt nicht", siehe `CHRG_PIN` in `src/wittypi.py`),
+  und `cat ~/wittypi/schedule.wpi` prüfen, ob noch die `WAIT`-Variante
+  (`weatherpi-charging.wpi`) aktiv ist statt der harten Grid-Variante (`weatherpi.wpi`).
+  Ein Boot (egal welcher Art) reicht, damit `reconcile_schedule()` sich selbst korrigiert —
+  falls nicht, `wittypi.reconcile_schedule()` manuell aus einer Python-Shell aufrufen und
+  die Log-Ausgabe prüfen.
