@@ -21,10 +21,17 @@ REG_BATTERY_V_DEC = 0x02
 REG_USB_V_INT = 0x03
 REG_USB_V_DEC = 0x04
 
-# L3V7-only: dedicated GPIO input from the charge-management IC (see
-# ~/wittypi/utilities.sh). Pulled low while actively charging, high (via internal
-# pull-up) otherwise — this is the actual charging signal, unlike the Vout reading above.
-CHRG_PIN = 5
+# Power source as classified by WittyPi's MCU (I2C_POWER_MODE in ~/wittypi/utilities.sh):
+# 0 = powered from the external Vin/USB-C input, non-zero = running off the battery.
+# Verified on hardware by diffing the full register block plugged vs. unplugged: this
+# register is the only clean binary discriminator between the two states.
+#
+# Note this reports the power *source*, not charge activity — it stays 0 once a full
+# battery stops drawing current, which is what we want: the Pi should stay awake for as
+# long as USB-C is connected. GPIO 5 (CHRG_PIN), which wittyPi.sh uses for true charge
+# detection, reads a constant 1 on this unit regardless of input and cannot be used.
+REG_POWER_MODE = 0x07
+POWER_MODE_EXTERNAL = 0x00
 
 try:
     from smbus2 import SMBus
@@ -47,7 +54,6 @@ SCHEDULE_CHARGING_NAME = "weatherpi-charging.wpi"
 class WittyPi:
     VOLTAGE_EMPTY = 3.0
     VOLTAGE_FULL = 4.2
-    USB_CHARGING_THRESHOLD = 4.0
 
     def __init__(
         self,
@@ -96,23 +102,20 @@ class WittyPi:
         return max(0, min(100, pct))
 
     def is_charging(self) -> bool:
+        """True while external (USB-C) power is connected to WittyPi's own input.
+
+        No fallback on failure: the Vout rail reads ~5.2V from either power source, so
+        any heuristic built on it returns a confident wrong answer. False is the safe
+        default — it selects the normal schedule, whose hard shutdown is the backstop
+        that keeps battery-only operation from draining the cell.
+        """
+        if self._bus is None:
+            return False
         try:
-            subprocess.run(
-                ["gpio", "-g", "mode", str(CHRG_PIN), "up"],
-                check=True, capture_output=True, timeout=5,
-            )
-            subprocess.run(
-                ["gpio", "-g", "mode", str(CHRG_PIN), "in"],
-                check=True, capture_output=True, timeout=5,
-            )
-            result = subprocess.run(
-                ["gpio", "-g", "read", str(CHRG_PIN)],
-                check=True, capture_output=True, text=True, timeout=5,
-            )
-            return result.stdout.strip() == "0"
+            return self._bus.read_byte_data(I2C_ADDRESS, REG_POWER_MODE) == POWER_MODE_EXTERNAL
         except Exception as e:
-            logger.debug("GPIO read error (CHRG_PIN): %s — falling back to Vout heuristic", e)
-            return self.usb_voltage() > self.USB_CHARGING_THRESHOLD
+            logger.debug("I2C read error (power mode): %s — assuming battery", e)
+            return False
 
     def _apply_schedule(self, schedule_name: str) -> bool:
         """Copy <wittypi_dir>/schedules/<schedule_name> to <wittypi_dir>/schedule.wpi

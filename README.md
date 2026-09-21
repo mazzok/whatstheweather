@@ -258,8 +258,21 @@ Im Menü:
    und im WittyPi-4-L3V7-Handbuch nachschlagen.
 2. **"Auto-On when USB 5V is connected"** aktivieren (Menüpunkt im Hauptmenü, nicht in den
    Untermenüs) — nötig für die Charger-Wake-Funktion (Pi bootet automatisch, sobald ein
-   Ladegerät angeschlossen wird, siehe Verifikation in Schritt 12). Ist oft bereits
-   standardmäßig `[Yes]` — im Hauptmenü prüfen, bevor man danach sucht.
+   Ladegerät angeschlossen wird, siehe Verifikation in Schritt 12).
+
+   > **Nicht auf den Default verlassen — nachmessen.** Die Einstellung liegt im Register
+   > `I2C_CONF_DEFAULT_ON` (17). Auf der hier verwendeten Einheit stand sie trotz dieses
+   > Setup-Schritts auf `0x00` (deaktiviert), d.h. ein angestecktes Ladegerät weckte den
+   > Pi **nicht** — er blieb bis zum nächsten Startup-Alarm (bis zu 2h) aus. Direkt prüfen
+   > und ggf. setzen:
+   > ```bash
+   > i2cget -y 1 0x08 17          # 0x01 = aktiv, 0x00 = deaktiviert
+   > sudo i2cset -y 1 0x08 17 0x01
+   > ```
+   > Die Einstellung ist persistent (im WittyPi gespeichert, übersteht Stromverlust).
+   >
+   > **Konsequenz:** Solange USB-C steckt, bootet der Pi nach *jedem* Shutdown sofort wieder.
+   > Den Pi ausschalten geht dann nur durch Abstecken des Kabels.
 3. **Zeit synchronisieren** (Menüpunkt 1 oder 3 im Hauptmenü) — RTC-Drift kann sich zwischen
    Sessions ansammeln (siehe Kasten oben), vor dem nächsten Schritt einmal frisch syncen.
 4. Schedule-Script laden — **wichtig:** Das Hauptmenü (Menüpunkt 6, "Choose schedule
@@ -309,6 +322,30 @@ Im Menü:
     cp ~/whatstheweather/setup/schedule-charging.wpi ~/wittypi/schedules/weatherpi-charging.wpi
     ```
     Die App aktiviert sie automatisch zur Laufzeit, sobald sie erstmals Laden erkennt.
+
+4b. **WittyPi-Daemon patchen — sonst killt das Einstecken des Ladekabels den Pi:**
+    ```bash
+    bash ~/whatstheweather/setup/patch-wittypi-daemon.sh
+    sudo systemctl restart wittypi.service
+    ```
+
+    > **Warum:** Beim Anstecken von USB-C an WittyPis eigenen Eingang prellt GPIO-4 (die
+    > Shutdown-Request-Leitung) 1–2,5 Sekunden lang. Der MCU meldet diesen Burst als
+    > Button-Klick, und `daemon.sh` fährt bei **jeder** fallenden Flanke herunter — egal aus
+    > welchem Grund. Ergebnis ohne Patch: Ladegerät anstecken = Pi geht aus. Auf dieser
+    > Hardware gemessen (Firmware-ID `0x37`, Revision `0x07`): Abstecken erzeugt gar keine
+    > Flanken, Anstecken 4–7 Flanken mit `ACTION_REASON = 0x03` (Klick), ein regulärer
+    > geplanter Shutdown dagegen `0x02` (Alarm 2).
+    >
+    > Der Patch wertet `ACTION_REASON` aus, das `daemon.sh` ohnehin schon liest (bisher nur
+    > zum Loggen): `REASON_CLICK` wird geloggt und ignoriert, alle anderen Gründe fahren
+    > unverändert herunter.
+    >
+    > **Preis:** Shutdown per Knopfdruck am WittyPi funktioniert danach nicht mehr.
+    >
+    > **Nach jedem WittyPi-Software-Update erneut ausführen** — Updates ersetzen
+    > `daemon.sh` und setzen den Patch zurück. Das Script ist idempotent und legt ein
+    > Backup unter `daemon.sh.weatherpi-backup` an.
 
 ### 10. WiFi Connect (QR-Code-Provisionierung) installieren
 
@@ -452,8 +489,9 @@ Die App legt zur Laufzeit auf dem Pi eigene State-/Log-Dateien im Home-Verzeichn
   SD-Karte neuflashen.
 - **Pi bleibt dauerhaft wach, obwohl das Ladegerät entfernt wurde** — prüfen, ob
   `_run_charging_mode` das Laden noch fälschlich erkennt: `cat ~/.weather_display.log`
-  nach `Reconciling WittyPi schedule`/`Charger removed` durchsuchen, GPIO5 direkt lesen
-  (`gpio -g read 5` — `1` erwartet bei "lädt nicht", siehe `CHRG_PIN` in `src/wittypi.py`),
+  nach `Reconciling WittyPi schedule`/`Charger removed` durchsuchen, das Power-Mode-Register
+  direkt lesen (`i2cget -y 1 0x08 7` — `0x00` = externe Versorgung, alles andere =
+  Batteriebetrieb, siehe `REG_POWER_MODE` in `src/wittypi.py`),
   und `cat ~/wittypi/schedule.wpi` prüfen, ob noch die `WAIT`-Variante
   (`weatherpi-charging.wpi`) aktiv ist statt der harten Grid-Variante (`weatherpi.wpi`).
   Ein Boot (egal welcher Art) reicht, damit `reconcile_schedule()` sich selbst korrigiert —

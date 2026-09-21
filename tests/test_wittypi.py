@@ -8,11 +8,11 @@ import pytest
 
 @pytest.fixture
 def mock_smbus():
-    """Patch smbus2 and the wiringpi `gpio` CLI so tests run without hardware.
+    """Patch smbus2 and subprocess so tests run without hardware.
 
-    subprocess.run raises FileNotFoundError by default (as if `gpio` isn't
-    installed), exercising is_charging()'s Vout-heuristic fallback path.
-    Tests that want the primary GPIO-pin path override this locally.
+    subprocess.run raises FileNotFoundError by default, so any test that reaches a
+    shell-out path without opting in fails loudly rather than touching the host.
+    Schedule tests override it locally.
     """
     mock_bus = MagicMock()
     with patch("src.wittypi.SMBus", return_value=mock_bus), \
@@ -87,32 +87,35 @@ class TestBatteryPercentage:
 
 
 class TestIsCharging:
-    def test_gpio_low_means_charging(self, wittypi, mock_smbus):
-        with patch("src.wittypi.subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(stdout="0\n")
-            assert wittypi.is_charging() is True
-
-    def test_gpio_high_means_not_charging(self, wittypi, mock_smbus):
-        with patch("src.wittypi.subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(stdout="1\n")
-            assert wittypi.is_charging() is False
-
-    def test_falls_back_to_vout_heuristic_when_gpio_unavailable(self, wittypi, mock_smbus):
-        # mock_smbus's default patch already makes `gpio` raise FileNotFoundError
+    def test_power_mode_zero_means_external_power(self, wittypi, mock_smbus):
         mock_smbus.read_byte_data.side_effect = lambda addr, reg: {
-            0x03: 5, 0x04: 10,
-        }.get(reg, 0)
+            0x07: 0x00,
+        }.get(reg, 0xFF)
         assert wittypi.is_charging() is True
 
-    def test_fallback_not_charging_when_vout_low(self, wittypi, mock_smbus):
+    def test_power_mode_nonzero_means_battery(self, wittypi, mock_smbus):
+        # 0x02 is the value observed on hardware with USB-C disconnected.
         mock_smbus.read_byte_data.side_effect = lambda addr, reg: {
-            0x03: 0, 0x04: 0,
-        }.get(reg, 0)
+            0x07: 0x02,
+        }.get(reg, 0x00)
         assert wittypi.is_charging() is False
 
-    def test_fallback_not_charging_on_i2c_error(self, wittypi, mock_smbus):
+    def test_any_nonzero_power_mode_means_battery(self, wittypi, mock_smbus):
+        # Only 0 means external power; don't assume 0x02 is the sole battery code.
+        mock_smbus.read_byte_data.side_effect = lambda addr, reg: {
+            0x07: 0x01,
+        }.get(reg, 0x00)
+        assert wittypi.is_charging() is False
+
+    def test_not_charging_on_i2c_error(self, wittypi, mock_smbus):
         mock_smbus.read_byte_data.side_effect = OSError("I2C error")
         assert wittypi.is_charging() is False
+
+    def test_not_charging_without_i2c_bus(self, tmp_path):
+        from src.wittypi import WittyPi
+        with patch("src.wittypi.SMBus", None):
+            wp = WittyPi(recharge_path=tmp_path / ".weather_recharge")
+        assert wp.is_charging() is False
 
 
 class TestOffGridDays:
@@ -121,6 +124,7 @@ class TestOffGridDays:
         mock_smbus.read_byte_data.side_effect = lambda addr, reg: {
             0x01: 3, 0x02: 90,
             0x03: 0, 0x04: 0,
+            0x07: 0x02,  # battery mode
         }.get(reg, 0)
         wp = WittyPi(recharge_path=tmp_path / ".weather_recharge")
         days = wp.get_off_grid_days()
@@ -133,6 +137,7 @@ class TestOffGridDays:
         mock_smbus.read_byte_data.side_effect = lambda addr, reg: {
             0x01: 3, 0x02: 60,
             0x03: 0, 0x04: 0,
+            0x07: 0x02,  # battery mode
         }.get(reg, 0)
         recharge_path = tmp_path / ".weather_recharge"
         five_days_ago = str(date.today() - timedelta(days=5))
@@ -145,6 +150,7 @@ class TestOffGridDays:
         mock_smbus.read_byte_data.side_effect = lambda addr, reg: {
             0x01: 3, 0x02: 90,
             0x03: 5, 0x04: 10,
+            0x07: 0x00,  # external power
         }.get(reg, 0)
         recharge_path = tmp_path / ".weather_recharge"
         recharge_path.write_text(json.dumps({"date": "2026-04-01", "percentage": 50}))
@@ -158,6 +164,7 @@ class TestOffGridDays:
         mock_smbus.read_byte_data.side_effect = lambda addr, reg: {
             0x01: 3, 0x02: 90,
             0x03: 0, 0x04: 0,
+            0x07: 0x02,  # battery mode
         }.get(reg, 0)
         recharge_path = tmp_path / ".weather_recharge"
         recharge_path.write_text(json.dumps({"date": "2026-04-10", "percentage": 50}))
@@ -172,6 +179,7 @@ class TestLogBoot:
         mock_smbus.read_byte_data.side_effect = lambda addr, reg: {
             0x01: 3, 0x02: 92,
             0x03: 0, 0x04: 0,
+            0x07: 0x02,  # battery mode
         }.get(reg, 0)
         from src.wittypi import WittyPi
         log_path = tmp_path / "battery_log.csv"
@@ -193,6 +201,7 @@ class TestLogBoot:
         mock_smbus.read_byte_data.side_effect = lambda addr, reg: {
             0x01: 3, 0x02: 92,
             0x03: 0, 0x04: 0,
+            0x07: 0x02,  # battery mode
         }.get(reg, 0)
         from src.wittypi import WittyPi
         log_path = tmp_path / "battery_log.csv"
@@ -210,6 +219,7 @@ class TestLogBoot:
         mock_smbus.read_byte_data.side_effect = lambda addr, reg: {
             0x01: 3, 0x02: 92,
             0x03: 0, 0x04: 0,
+            0x07: 0x02,  # battery mode
         }.get(reg, 0)
         from src.wittypi import WittyPi
         # Point to a non-existent directory so open() fails
