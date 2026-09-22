@@ -55,6 +55,7 @@ def render_display(
     off_grid_days: int,
     error: str = "",
     city: str = "",
+    charging: bool = False,
 ) -> Image.Image:
     """Compose and return the full 800x480 grayscale display image."""
     # Use 245 (slightly off-white, matching e-ink paper tone) so the background
@@ -63,7 +64,7 @@ def render_display(
     draw = ImageDraw.Draw(img)
 
     y = 0
-    _draw_status_bar(draw, y, battery_pct, off_grid_days, error or weather.error)
+    _draw_status_bar(draw, y, battery_pct, off_grid_days, error or weather.error, charging)
     y += STATUS_BAR_H
 
     _draw_weather_section(draw, img, y, weather, city)
@@ -84,6 +85,7 @@ def _draw_status_bar(
     battery_pct: float,
     off_grid_days: int,
     error: str,
+    charging: bool = False,
 ) -> None:
     font = _load_font(False, 14)
 
@@ -94,16 +96,40 @@ def _draw_status_bar(
         text = f"Off grid: {off_grid_days} days"
     draw.text((16, y + 6), text, fill=BLACK, font=font)
 
-    # Right: battery percentage + icon
+    # Right: battery percentage (or charging label) + icon
     # Battery body: 28×14 at right edge
     bx = DISPLAY_WIDTH - 16 - 28 - 4  # leave room for terminal nub
     by = y + (STATUS_BAR_H - 14) // 2
     bw, bh = 28, 14
-    # Percentage text left of battery icon
-    pct_text = f"{int(battery_pct)}%"
-    pct_bbox = font.getbbox(pct_text)
-    pct_w = pct_bbox[2] - pct_bbox[0]
-    draw.text((bx - pct_w - 6, y + 6), pct_text, fill=BLACK, font=font)
+
+    if charging:
+        # Voltage is masked by the charger's constant-voltage phase while plugged
+        # in (see design doc problem 3), so showing a percentage here would lie.
+        label_text = "Lädt"
+        label_bbox = font.getbbox(label_text)
+        label_w = label_bbox[2] - label_bbox[0]
+        bolt_w, bolt_h = 10, 14
+        bolt_x = bx - label_w - 6 - bolt_w - 4
+        bolt_y = y + 6
+        # Lightning bolt as a simple zig-zag polygon (no font glyph for U+26A1).
+        draw.polygon(
+            [
+                (bolt_x + bolt_w * 0.55, bolt_y),
+                (bolt_x, bolt_y + bolt_h * 0.6),
+                (bolt_x + bolt_w * 0.4, bolt_y + bolt_h * 0.6),
+                (bolt_x + bolt_w * 0.15, bolt_y + bolt_h),
+                (bolt_x + bolt_w, bolt_y + bolt_h * 0.35),
+                (bolt_x + bolt_w * 0.55, bolt_y + bolt_h * 0.35),
+            ],
+            fill=BLACK,
+        )
+        draw.text((bx - label_w - 6, y + 6), label_text, fill=BLACK, font=font)
+    else:
+        pct_text = f"{int(battery_pct)}%"
+        pct_bbox = font.getbbox(pct_text)
+        pct_w = pct_bbox[2] - pct_bbox[0]
+        draw.text((bx - pct_w - 6, y + 6), pct_text, fill=BLACK, font=font)
+
     draw.rectangle([bx, by, bx + bw, by + bh], outline=BLACK, width=2)
     # Terminal nub (3×7 centred on right edge)
     nub_w, nub_h = 3, 7

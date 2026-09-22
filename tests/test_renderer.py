@@ -52,3 +52,23 @@ def test_render_display_preview_saves_png(tmp_path):
 def test_render_display_no_city():
     img = render_display(_sample_weather(), battery_pct=78, off_grid_days=2450)
     assert img.size == (DISPLAY_WIDTH, DISPLAY_HEIGHT)
+
+
+def test_render_display_charging_differs_from_not_charging():
+    img_off = render_display(_sample_weather(), battery_pct=78, off_grid_days=2450, city="Wien", charging=False)
+    img_on = render_display(_sample_weather(), battery_pct=78, off_grid_days=2450, city="Wien", charging=True)
+    assert list(img_off.getdata()) != list(img_on.getdata())
+
+
+def test_render_display_charging_true_keeps_size_and_mode():
+    img = render_display(_sample_weather(), battery_pct=78, off_grid_days=2450, city="Wien", charging=True)
+    assert img.size == (DISPLAY_WIDTH, DISPLAY_HEIGHT)
+    assert img.mode == "L"
+
+
+def test_render_display_charging_defaults_to_false():
+    # Callers that don't pass charging= (existing tests above, __main__ preview) must
+    # keep working unchanged.
+    img_default = render_display(_sample_weather(), battery_pct=78, off_grid_days=2450, city="Wien")
+    img_explicit_false = render_display(_sample_weather(), battery_pct=78, off_grid_days=2450, city="Wien", charging=False)
+    assert list(img_default.getdata()) == list(img_explicit_false.getdata())
