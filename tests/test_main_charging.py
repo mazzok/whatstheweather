@@ -19,7 +19,7 @@ class TestRunChargingMode:
         _run_charging_mode({"interval": 60}, wittypi)
 
         # First call is run_once (before any sleep)
-        assert mock_run_once.call_args_list[0] == call({"interval": 60}, 75, 0)
+        assert mock_run_once.call_args_list[0] == call({"interval": 60}, 75, 0, charging=True)
 
     @patch("src.main.run_once")
     @patch("src.main.time.sleep")
@@ -37,7 +37,7 @@ class TestRunChargingMode:
         # 1 in loop + 1 final
         assert mock_run_once.call_count == 2
         # Last call is the final update
-        assert mock_run_once.call_args_list[-1] == call({"interval": 60}, 80, 2)
+        assert mock_run_once.call_args_list[-1] == call({"interval": 60}, 80, 2, charging=False)
 
     @patch("src.main.run_once")
     @patch("src.main.time.sleep")
