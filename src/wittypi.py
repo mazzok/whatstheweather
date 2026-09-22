@@ -33,6 +33,29 @@ REG_USB_V_DEC = 0x04
 REG_POWER_MODE = 0x07
 POWER_MODE_EXTERNAL = 0x00
 
+# LiPo discharge is strongly nonlinear; a straight-line voltage-to-percent mapping
+# overestimates charge by ~38 percentage points near empty. These control points
+# (descending by voltage) come from a real discharge curve for this cell chemistry.
+_SOC_CURVE: list[tuple[float, int]] = [
+    (4.20, 100), (4.06, 90), (3.98, 80), (3.92, 70), (3.87, 60),
+    (3.82, 50), (3.79, 40), (3.77, 30), (3.74, 20), (3.68, 10), (3.45, 0),
+]
+
+
+def _voltage_to_percent(v: float) -> int:
+    """Map a battery voltage to a state-of-charge percentage via piecewise-linear
+    interpolation over _SOC_CURVE. Pure and stateless — no I2C, no hardware needed."""
+    if v >= _SOC_CURVE[0][0]:
+        return 100
+    if v <= _SOC_CURVE[-1][0]:
+        return 0
+    for (v_hi, p_hi), (v_lo, p_lo) in zip(_SOC_CURVE, _SOC_CURVE[1:]):
+        if v_lo <= v <= v_hi:
+            frac = (v - v_lo) / (v_hi - v_lo)
+            return round(p_lo + frac * (p_hi - p_lo))
+    return 0  # unreachable given the bounds checks above
+
+
 try:
     from smbus2 import SMBus
 except ImportError:

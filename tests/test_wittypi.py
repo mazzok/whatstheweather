@@ -26,6 +26,37 @@ def wittypi(mock_smbus):
     return WittyPi()
 
 
+from src.wittypi import _voltage_to_percent
+
+
+class TestVoltageToPercent:
+    @pytest.mark.parametrize("voltage,expected", [
+        (4.20, 100),
+        (4.06, 90),
+        (3.98, 80),
+        (3.92, 70),
+        (3.87, 60),
+        (3.82, 50),
+        (3.79, 40),
+        (3.77, 30),
+        (3.74, 20),
+        (3.68, 10),
+        (3.45, 0),
+    ])
+    def test_exact_control_points(self, voltage, expected):
+        assert _voltage_to_percent(voltage) == expected
+
+    def test_interpolates_between_control_points(self):
+        # Midpoint between (3.87, 60) and (3.92, 70)
+        assert _voltage_to_percent(3.895) == 65
+
+    def test_above_full_clamps_to_100(self):
+        assert _voltage_to_percent(4.50) == 100
+
+    def test_below_empty_clamps_to_0(self):
+        assert _voltage_to_percent(3.00) == 0
+
+
 class TestVoltageReading:
     def test_battery_voltage(self, wittypi, mock_smbus):
         mock_smbus.read_byte_data.side_effect = lambda addr, reg: {
