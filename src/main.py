@@ -38,7 +38,7 @@ def _wait_for_network(timeout: int = NETWORK_TIMEOUT) -> bool:
     return False
 
 
-def run_once(config: dict, battery_pct: int, off_grid_days: int) -> None:
+def run_once(config: dict, battery_pct: int, off_grid_days: int, charging: bool) -> None:
     logger = logging.getLogger(__name__)
 
     has_network = _wait_for_network()
@@ -54,6 +54,7 @@ def run_once(config: dict, battery_pct: int, off_grid_days: int) -> None:
                 battery_pct=battery_pct,
                 off_grid_days=off_grid_days,
                 error="Kein Netz",
+                charging=charging,
             )
             update_display_4gray(image)
             return
@@ -75,7 +76,9 @@ def run_once(config: dict, battery_pct: int, off_grid_days: int) -> None:
     weather = get_weather(lat, lon)
 
     # 3. Render
-    image = render_display(weather, battery_pct=battery_pct, off_grid_days=off_grid_days, city=city)
+    image = render_display(
+        weather, battery_pct=battery_pct, off_grid_days=off_grid_days, city=city, charging=charging,
+    )
 
     # 4. Update display
     if config["debug"]:
@@ -103,7 +106,7 @@ def _run_charging_mode(config: dict, wittypi: WittyPi) -> None:
     while wittypi.is_charging():
         battery_pct = wittypi.battery_percentage()
         off_grid_days = wittypi.get_off_grid_days()
-        run_once(config, battery_pct, off_grid_days)
+        run_once(config, battery_pct, off_grid_days, charging=True)
         remaining = config["interval"]
         while remaining > 0 and wittypi.is_charging():
             time.sleep(min(60, remaining))
@@ -112,7 +115,7 @@ def _run_charging_mode(config: dict, wittypi: WittyPi) -> None:
     wittypi.reconcile_schedule()
     battery_pct = wittypi.battery_percentage()
     off_grid_days = wittypi.get_off_grid_days()
-    run_once(config, battery_pct, off_grid_days)
+    run_once(config, battery_pct, off_grid_days, charging=False)
 
 
 def main() -> None:
@@ -143,7 +146,7 @@ def main() -> None:
         while True:
             battery_pct = wittypi.battery_percentage()
             off_grid_days = wittypi.get_off_grid_days()
-            run_once(config, battery_pct, off_grid_days)
+            run_once(config, battery_pct, off_grid_days, charging=wittypi.is_charging())
             logger.info("Next update in %d seconds", config["interval"])
             time.sleep(config["interval"])
     elif wittypi.is_charging():
@@ -152,7 +155,7 @@ def main() -> None:
     else:
         battery_pct = wittypi.battery_percentage()
         off_grid_days = wittypi.get_off_grid_days()
-        run_once(config, battery_pct, off_grid_days)
+        run_once(config, battery_pct, off_grid_days, charging=wittypi.is_charging())
         logger.info("Shutting down...")
         subprocess.run(["sudo", "shutdown", "-h", "now"])
 
