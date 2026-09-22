@@ -74,7 +74,7 @@ class TestVoltageReading:
 
     def test_battery_voltage_fallback_on_error(self, wittypi, mock_smbus):
         mock_smbus.read_byte_data.side_effect = OSError("I2C error")
-        assert wittypi.battery_voltage() == 3.7
+        assert wittypi.battery_voltage() == 3.82
 
     def test_usb_voltage_fallback_on_error(self, wittypi, mock_smbus):
         mock_smbus.read_byte_data.side_effect = OSError("I2C error")
@@ -94,11 +94,13 @@ class TestBatteryPercentage:
         }.get(reg, 0)
         assert wittypi.battery_percentage() == 0
 
-    def test_mid(self, wittypi, mock_smbus):
+    def test_uses_curve_not_old_linear_formula(self, wittypi, mock_smbus):
+        # 3.74V is an exact SOC-curve control point (20%). The old linear formula
+        # ((v - 3.0) / 1.2 * 100) would give 62% here — a 42-point overestimate.
         mock_smbus.read_byte_data.side_effect = lambda addr, reg: {
-            0x01: 3, 0x02: 60,
+            0x01: 3, 0x02: 74,
         }.get(reg, 0)
-        assert wittypi.battery_percentage() == 50
+        assert wittypi.battery_percentage() == 20
 
     def test_clamps_above(self, wittypi, mock_smbus):
         mock_smbus.read_byte_data.side_effect = lambda addr, reg: {
@@ -112,7 +114,9 @@ class TestBatteryPercentage:
         }.get(reg, 0)
         assert wittypi.battery_percentage() == 0
 
-    def test_fallback(self, wittypi, mock_smbus):
+    def test_fallback_without_i2c_bus(self, wittypi, mock_smbus):
+        # No I2C bus -> battery_voltage() falls back to 3.82V, which maps to
+        # exactly 50% on the new curve. Anchors the "unknown -> 50%" behavior.
         mock_smbus.read_byte_data.side_effect = OSError("I2C error")
         assert wittypi.battery_percentage() == 50
 
@@ -162,7 +166,7 @@ class TestOffGridDays:
         assert days == 0
         data = json.loads((tmp_path / ".weather_recharge").read_text())
         assert data["date"] == str(date.today())
-        assert data["percentage"] == 75
+        assert data["percentage"] == 66
 
     def test_returns_days_since_last_recharge(self, mock_smbus, tmp_path):
         mock_smbus.read_byte_data.side_effect = lambda addr, reg: {
@@ -224,7 +228,7 @@ class TestLogBoot:
         assert lines[0] == "timestamp,battery_v,battery_pct,usb_v,charging"
         row = lines[1].split(",")
         assert row[1] == "3.92"
-        assert row[2] == "77"
+        assert row[2] == "70"
         assert row[3] == "0.00"
         assert row[4] == "false"
 

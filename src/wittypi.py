@@ -75,9 +75,6 @@ SCHEDULE_CHARGING_NAME = "weatherpi-charging.wpi"
 
 
 class WittyPi:
-    VOLTAGE_EMPTY = 3.0
-    VOLTAGE_FULL = 4.2
-
     def __init__(
         self,
         recharge_path: Path = DEFAULT_RECHARGE_PATH,
@@ -107,22 +104,13 @@ class WittyPi:
             return fallback
 
     def battery_voltage(self) -> float:
-        return self._read_voltage(REG_BATTERY_V_INT, REG_BATTERY_V_DEC, fallback=3.7)
+        return self._read_voltage(REG_BATTERY_V_INT, REG_BATTERY_V_DEC, fallback=3.82)
 
     def usb_voltage(self) -> float:
         return self._read_voltage(REG_USB_V_INT, REG_USB_V_DEC, fallback=0.0)
 
     def battery_percentage(self) -> int:
-        if self._bus is None:
-            return 50
-        try:
-            v_int = self._bus.read_byte_data(I2C_ADDRESS, REG_BATTERY_V_INT)
-            v_dec = self._bus.read_byte_data(I2C_ADDRESS, REG_BATTERY_V_DEC)
-            v = v_int + v_dec / 100.0
-        except Exception:
-            return 50
-        pct = round((v - self.VOLTAGE_EMPTY) / (self.VOLTAGE_FULL - self.VOLTAGE_EMPTY) * 100)
-        return max(0, min(100, pct))
+        return _voltage_to_percent(self.battery_voltage())
 
     def is_charging(self) -> bool:
         """True while external (USB-C) power is connected to WittyPi's own input.
