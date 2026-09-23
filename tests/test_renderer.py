@@ -111,6 +111,38 @@ def test_render_display_highlights_today_column():
     assert black_today > black_baseline + 10000
 
 
+def _sample_avg_temp_y_positions() -> list[int | None]:
+    # Mirrors _draw_chart's temp_to_y() geometry for _sample_weather()'s fixed
+    # data, so tests can locate each day's avg-temp glyph without depending on
+    # renderer internals being exported.
+    #
+    # _sample_weather()'s week starts on a Tuesday (2026-04-14), but the chart
+    # always windows Monday-Sunday of "today"'s week. With today pinned to
+    # 2026-04-17 (a Friday), that window is 2026-04-13..2026-04-19, so day
+    # index 0 (Monday 04-13) has no matching forecast entry (None) and every
+    # other index is shifted by one relative to _sample_weather()'s list.
+    header_area_h, footer_area_h = 26, 34
+    y_start = STATUS_BAR_H + WEATHER_SECTION_H
+    chart_top = y_start + header_area_h + 8
+    chart_bottom = DISPLAY_HEIGHT - footer_area_h - 4
+    chart_height = chart_bottom - chart_top
+
+    avgs = [12, 14, 16, 19, 17, 18]
+    mins = [5, 7, 8, 10, 9, 8]
+    maxs = [18, 20, 22, 25, 23, 24]
+    all_temps = avgs + mins + maxs
+    temp_min_global, temp_max_global = min(all_temps), max(all_temps)
+    temp_range = max(temp_max_global - temp_min_global, 1.0)
+    t_lo = temp_min_global - temp_range * 0.08
+    t_hi = temp_max_global + temp_range * 0.08
+
+    def temp_to_y(t: float) -> int:
+        frac = (t - t_lo) / (t_hi - t_lo)
+        return int(chart_bottom - frac * chart_height)
+
+    return [None] + [temp_to_y(a) for a in avgs]
+
+
 def _chart_column_x_range(day_index: int) -> tuple[int, int]:
     chart_left = SIDE_PADDING + CHART_MARGIN_LEFT
     chart_right = DISPLAY_WIDTH - SIDE_PADDING - CHART_MARGIN_RIGHT
@@ -164,4 +196,51 @@ def test_render_display_only_todays_minmax_shown_below_chart():
     footer_pixels = list(footer_band.getdata())
     assert all(p > 100 for p in footer_pixels), (
         "non-today columns must not show min/max text below the chart anymore"
+    )
+
+
+def _avg_temp_glyph_height(img: Image.Image, day_index: int, py: int) -> int:
+    # Window just below the icon, tight enough to avoid the chart's dashed
+    # gridlines. Background may be light (past/future days) or black (today,
+    # inside the highlight bar), so detect "content" rows relative to the
+    # crop's own corner pixel rather than a fixed background value.
+    icon_sz = 38
+    col_left, col_right = _chart_column_x_range(day_index)
+    y0, y1 = py + icon_sz // 2 + 2, py + icon_sz // 2 + 42
+    crop = img.crop(_rotated_180_rect(col_left, y0, col_right, y1))
+    w, h = crop.size
+    pixels = crop.load()
+    background = pixels[0, 0]
+    rows_with_content = {
+        row for row in range(h)
+        if any(abs(pixels[col, row] - background) > 40 for col in range(w))
+    }
+    # Longest contiguous run, so a single stray gridline row far from the
+    # actual glyph can't inflate the measured height.
+    best_run = run = 0
+    for row in range(h):
+        if row in rows_with_content:
+            run += 1
+            best_run = max(best_run, run)
+        else:
+            run = 0
+    return best_run
+
+
+def test_render_display_todays_avg_temp_is_bigger():
+    with patch("src.renderer.date") as mock_date:
+        mock_date.today.return_value = date(2026, 4, 17)
+        img = render_display(_sample_weather(), battery_pct=78, off_grid_days=2450, city="Wien")
+
+    py_positions = _sample_avg_temp_y_positions()
+    # day_index 1 (2026-04-14, Tuesday) is a "past" day - its avg-temp glyph
+    # stays at the unchanged, smaller size. day_index 4 (2026-04-17, Friday)
+    # is "today" (see _sample_avg_temp_y_positions for the index shift) and
+    # should render noticeably taller.
+    past_height = _avg_temp_glyph_height(img, 1, py_positions[1])
+    today_height = _avg_temp_glyph_height(img, 4, py_positions[4])
+
+    assert today_height > past_height * 1.2, (
+        f"expected today's avg temp glyph ({today_height}px) to be noticeably "
+        f"taller than a past day's ({past_height}px)"
     )

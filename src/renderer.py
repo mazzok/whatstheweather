@@ -412,6 +412,7 @@ def _draw_chart(
 
     # --- Draw circles, mini icons, and avg temp below dots ---
     font_dot_temp = _load_font(True, 20)
+    font_dot_temp_today = _load_font(True, 32)  # today's avg temp stands out
     for i, p in enumerate(points):
         if p is None:
             continue
@@ -432,10 +433,11 @@ def _draw_chart(
         draw_icon(draw, p[4], icon_x, icon_y, icon_sz, dot_color, outline_only=is_future)
 
         # Avg temperature below the icon
+        avg_font = font_dot_temp_today if is_today_flag else font_dot_temp
         avg_str = f"{int(round(p[3]))}°"
-        avg_bbox = draw.textbbox((0, 0), avg_str, font=font_dot_temp)
+        avg_bbox = draw.textbbox((0, 0), avg_str, font=avg_font)
         avg_w = avg_bbox[2] - avg_bbox[0]
-        draw.text((px - avg_w // 2, py + icon_sz // 2 + 4), avg_str, fill=dot_color, font=font_dot_temp)
+        draw.text((px - avg_w // 2, py + icon_sz // 2 + 4), avg_str, fill=dot_color, font=avg_font)
 
     # --- Header row above the plot: weekday name for every day ---
     font_day = _load_font(True, 20)
