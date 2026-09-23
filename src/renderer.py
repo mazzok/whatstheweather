@@ -269,6 +269,11 @@ def _draw_chart(
     chart_bottom = DISPLAY_HEIGHT - label_area_h - 4
     chart_height = chart_bottom - chart_top
 
+    # X positions for each day (evenly spaced, centred in columns)
+    col_w = chart_width / 7
+    def day_x(i: int) -> int:
+        return int(chart_left + (i + 0.5) * col_w)
+
     # --- Determine the 7-day window: Monday of current week ---
     today = date.today()
     # Find this week's Monday
@@ -295,6 +300,30 @@ def _draw_chart(
     if not all_temps:
         return
 
+    # --- Classify each day as past / today / future ---
+    # today index within the 7-day window
+    today_idx: int | None = None
+    for i, d in enumerate(week_dates):
+        if d == today:
+            today_idx = i
+            break
+
+    def _is_past(i: int) -> bool:
+        if today_idx is None:
+            return False
+        return i < today_idx
+
+    def _is_today(i: int) -> bool:
+        return i == today_idx
+
+    # --- "Today" highlight bar: full column, floor to top, eyecatcher for the
+    # active day. Drawn before axes/gridlines/lines/icons/labels so those
+    # layer on top of it in their existing draw order. ---
+    if today_idx is not None:
+        col_left = int(chart_left + today_idx * col_w)
+        col_right = int(chart_left + (today_idx + 1) * col_w)
+        draw.rectangle([col_left, chart_top, col_right, DISPLAY_HEIGHT], fill=BLACK)
+
     temp_min_global = min(all_temps)
     temp_max_global = max(all_temps)
     # Add a little padding
@@ -305,11 +334,6 @@ def _draw_chart(
     def temp_to_y(t: float) -> int:
         frac = (t - t_lo) / (t_hi - t_lo)
         return int(chart_bottom - frac * chart_height)
-
-    # X positions for each day (evenly spaced, centred in columns)
-    col_w = chart_width / 7
-    def day_x(i: int) -> int:
-        return int(chart_left + (i + 0.5) * col_w)
 
     # --- Draw chart axes ---
     draw.line([(chart_left, chart_top), (chart_left, chart_bottom)], fill=BLACK, width=2)
@@ -335,22 +359,6 @@ def _draw_chart(
         while x < chart_right:
             draw.line([(x, ypos), (min(x + 4, chart_right), ypos)], fill=180, width=1)
             x += 8
-
-    # --- Classify each day as past / today / future ---
-    # today index within the 7-day window
-    today_idx: int | None = None
-    for i, d in enumerate(week_dates):
-        if d == today:
-            today_idx = i
-            break
-
-    def _is_past(i: int) -> bool:
-        if today_idx is None:
-            return False
-        return i < today_idx
-
-    def _is_today(i: int) -> bool:
-        return i == today_idx
 
     # --- Collect (x, y_avg) for valid points to draw lines ---
     avg_positions: list[tuple[int, int, int, bool]] = []  # (i, px, py, is_past)
@@ -409,7 +417,9 @@ def _draw_chart(
         is_past = _is_past(i)
         is_today_flag = _is_today(i)
 
-        dot_color = GRAY if is_past else BLACK
+        # Today's column sits on the black highlight bar — invert to white so
+        # the icon and temperature stay legible.
+        dot_color = WHITE if is_today_flag else (GRAY if is_past else BLACK)
 
         # Weather icon centered on data point
         # Today: filled, future: outline only, past: filled gray
@@ -431,7 +441,9 @@ def _draw_chart(
     for i, (d, p) in enumerate(zip(week_dates, points)):
         px = day_x(i)
         is_past = _is_past(i)
-        lbl_color = GRAY if is_past else BLACK
+        is_today_flag = _is_today(i)
+        # Today's labels sit on the black bar too (it extends past chart_bottom).
+        lbl_color = WHITE if is_today_flag else (GRAY if is_past else BLACK)
         wd = WEEKDAYS[d.weekday()]
 
         # Row 1: weekday name (centred, larger)

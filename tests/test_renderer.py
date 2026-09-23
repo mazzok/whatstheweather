@@ -1,4 +1,5 @@
 from datetime import date
+from unittest.mock import patch
 from PIL import Image
 from src.renderer import render_display, DISPLAY_WIDTH, DISPLAY_HEIGHT
 from src.weather import WeatherData, DayForecast
@@ -86,3 +87,22 @@ def test_render_display_charging_ignores_battery_level_for_fill():
     # At 5% the non-charging fill bar is nearly empty; charging fills the whole
     # body, so it must contain noticeably more black pixels.
     assert black_charging > black_not_charging + 50
+
+
+def test_render_display_highlights_today_column():
+    # 2026-04-17 is the "current_temp" day in _sample_weather()'s week, so
+    # pinning date.today() to it puts "today" inside the rendered 7-day window
+    # and the highlight bar should draw. Patching src.renderer.date also shifts
+    # _draw_weather_section's date line, which is expected and harmless here.
+    with patch("src.renderer.date") as mock_date:
+        mock_date.today.return_value = date(2026, 4, 17)
+        img_today = render_display(_sample_weather(), battery_pct=78, off_grid_days=2450, city="Wien")
+    # Real system date isn't inside the sample week, so no column is highlighted.
+    img_baseline = render_display(_sample_weather(), battery_pct=78, off_grid_days=2450, city="Wien")
+
+    black_today = sum(1 for p in img_today.getdata() if p < 10)
+    black_baseline = sum(1 for p in img_baseline.getdata() if p < 10)
+    # The highlight bar alone adds roughly col_width (~94px) × (DISPLAY_HEIGHT -
+    # chart_top) (~251px) ≈ 23,000 solid-black pixels — far more than the
+    # handful of chart lines/icons it replaces within that column.
+    assert black_today > black_baseline + 10000
