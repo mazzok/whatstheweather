@@ -1,7 +1,10 @@
 from datetime import date
 from unittest.mock import patch
 from PIL import Image
-from src.renderer import render_display, DISPLAY_WIDTH, DISPLAY_HEIGHT
+from src.renderer import (
+    render_display, DISPLAY_WIDTH, DISPLAY_HEIGHT,
+    STATUS_BAR_H, WEATHER_SECTION_H, SIDE_PADDING, CHART_MARGIN_LEFT, CHART_MARGIN_RIGHT,
+)
 from src.weather import WeatherData, DayForecast
 
 
@@ -106,3 +109,59 @@ def test_render_display_highlights_today_column():
     # chart_top) (~251px) ≈ 23,000 solid-black pixels — far more than the
     # handful of chart lines/icons it replaces within that column.
     assert black_today > black_baseline + 10000
+
+
+def _chart_column_x_range(day_index: int) -> tuple[int, int]:
+    chart_left = SIDE_PADDING + CHART_MARGIN_LEFT
+    chart_right = DISPLAY_WIDTH - SIDE_PADDING - CHART_MARGIN_RIGHT
+    col_w = (chart_right - chart_left) / 7
+    col_left = int(chart_left + day_index * col_w)
+    col_right = int(chart_left + (day_index + 1) * col_w)
+    return col_left, col_right
+
+
+def _rotated_180_rect(x0: int, y0: int, x1: int, y1: int) -> tuple[int, int, int, int]:
+    # render_display() returns img.rotate(180) - map a rect computed in the
+    # pre-rotation drawing coordinates to where it ends up in the final image.
+    return (
+        DISPLAY_WIDTH - x1, DISPLAY_HEIGHT - y1,
+        DISPLAY_WIDTH - x0, DISPLAY_HEIGHT - y0,
+    )
+
+
+def test_render_display_weekday_label_sits_above_plot():
+    # 2026-04-17 is a Friday in _sample_weather()'s week; day_index 0
+    # (2026-04-14, Monday) is a "past" day, never the highlighted "today"
+    # column, so its label always renders in plain black/gray text -
+    # simplest column to probe for the weekday label's y-position.
+    with patch("src.renderer.date") as mock_date:
+        mock_date.today.return_value = date(2026, 4, 17)
+        img = render_display(_sample_weather(), battery_pct=78, off_grid_days=2450, city="Wien")
+
+    y_start = STATUS_BAR_H + WEATHER_SECTION_H
+    col_left, col_right = _chart_column_x_range(0)
+
+    # Directly under y_start is reserved chart top-padding in the old layout
+    # (nothing drawn there) - the weekday label now lives in this band.
+    header_band = img.crop(_rotated_180_rect(col_left, y_start, col_right, y_start + 12))
+    header_pixels = list(header_band.getdata())
+    assert any(p < 100 for p in header_pixels), (
+        "expected the weekday label to render in a header band just below y_start"
+    )
+
+
+def test_render_display_only_todays_minmax_shown_below_chart():
+    with patch("src.renderer.date") as mock_date:
+        mock_date.today.return_value = date(2026, 4, 17)
+        img = render_display(_sample_weather(), battery_pct=78, off_grid_days=2450, city="Wien")
+
+    # day_index 0 (2026-04-14, Monday) is never "today" - its column must have
+    # no temperature text left in the bottom label area. Start a few pixels
+    # below DISPLAY_HEIGHT - 40 to skip over the chart's x-axis line itself,
+    # which legitimately spans every column.
+    col_left, col_right = _chart_column_x_range(0)
+    footer_band = img.crop(_rotated_180_rect(col_left, DISPLAY_HEIGHT - 32, col_right, DISPLAY_HEIGHT))
+    footer_pixels = list(footer_band.getdata())
+    assert all(p > 100 for p in footer_pixels), (
+        "non-today columns must not show min/max text below the chart anymore"
+    )

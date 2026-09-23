@@ -257,16 +257,19 @@ def _draw_chart(
     font_small = _load_font(False, 11)
     font_avg = _load_font(True, 22)       # was 15, then 19
     font_yaxis = _load_font(True, 19)     # was 15
+    font_today_minmax = _load_font(True, 22)  # 2x the old 11px axis min/max font
 
     # Layout
     chart_left = SIDE_PADDING + CHART_MARGIN_LEFT
     chart_right = DISPLAY_WIDTH - SIDE_PADDING - CHART_MARGIN_RIGHT
     chart_width = chart_right - chart_left
 
-    # X-axis label area height at bottom
-    label_area_h = 40
-    chart_top = y_start + 14           # small top padding
-    chart_bottom = DISPLAY_HEIGHT - label_area_h - 4
+    # Weekday header row above the plot, and a footer row below reserved for
+    # only today's (bigger) min/max text.
+    header_area_h = 26
+    footer_area_h = 34
+    chart_top = y_start + header_area_h + 8
+    chart_bottom = DISPLAY_HEIGHT - footer_area_h - 4
     chart_height = chart_bottom - chart_top
 
     # X positions for each day (evenly spaced, centred in columns)
@@ -322,7 +325,7 @@ def _draw_chart(
     if today_idx is not None:
         col_left = int(chart_left + today_idx * col_w)
         col_right = int(chart_left + (today_idx + 1) * col_w)
-        draw.rectangle([col_left, chart_top, col_right, DISPLAY_HEIGHT], fill=BLACK)
+        draw.rectangle([col_left, y_start, col_right, DISPLAY_HEIGHT], fill=BLACK)
 
     temp_min_global = min(all_temps)
     temp_max_global = max(all_temps)
@@ -434,34 +437,29 @@ def _draw_chart(
         avg_w = avg_bbox[2] - avg_bbox[0]
         draw.text((px - avg_w // 2, py + icon_sz // 2 + 4), avg_str, fill=dot_color, font=font_dot_temp)
 
-    # --- X-axis labels ---
+    # --- Header row above the plot: weekday name for every day ---
     font_day = _load_font(True, 20)
-    font_minmax_axis = _load_font(False, 11)
-    label_y = chart_bottom + 8
-    for i, (d, p) in enumerate(zip(week_dates, points)):
+    header_y = y_start + 2
+    for i, d in enumerate(week_dates):
         px = day_x(i)
         is_past = _is_past(i)
         is_today_flag = _is_today(i)
-        # Today's labels sit on the black bar too (it extends past chart_bottom).
+        # Today's label sits on the black highlight bar, which now covers the
+        # header too, so it needs to be inverted white to stay legible.
         lbl_color = WHITE if is_today_flag else (GRAY if is_past else BLACK)
         wd = WEEKDAYS[d.weekday()]
-
-        # Row 1: weekday name (centred, larger)
         bbox = draw.textbbox((0, 0), wd, font=font_day)
         lw = bbox[2] - bbox[0]
-        draw.text((px - lw // 2, label_y), wd, fill=lbl_color, font=font_day)
+        draw.text((px - lw // 2, header_y), wd, fill=lbl_color, font=font_day)
 
-        if p is None:
-            continue
-
-        d_val, t_min, t_max, t_avg, icon = p
-
-        # Row 2: min° / max°
+    # --- Footer row below the plot: only today's min/max, at 2x the size ---
+    if today_idx is not None and points[today_idx] is not None:
+        _, t_min, t_max, _, _ = points[today_idx]
         minmax_str = f"{int(round(t_min))}° / {int(round(t_max))}°"
-        mm_bbox = draw.textbbox((0, 0), minmax_str, font=font_minmax_axis)
+        mm_bbox = draw.textbbox((0, 0), minmax_str, font=font_today_minmax)
         mm_w = mm_bbox[2] - mm_bbox[0]
-        row2_y = label_y + 22
-        draw.text((px - mm_w // 2, row2_y), minmax_str, fill=lbl_color, font=font_minmax_axis)
+        px = day_x(today_idx)
+        draw.text((px - mm_w // 2, chart_bottom + 6), minmax_str, fill=WHITE, font=font_today_minmax)
 
 
 # ---------------------------------------------------------------------------
