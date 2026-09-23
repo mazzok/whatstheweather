@@ -96,35 +96,13 @@ def _draw_status_bar(
         text = f"Off grid: {off_grid_days} days"
     draw.text((16, y + 6), text, fill=BLACK, font=font)
 
-    # Right: battery percentage (or charging label) + icon
+    # Right: battery percentage (or charging bolt) + icon
     # Battery body: 28×14 at right edge
     bx = DISPLAY_WIDTH - 16 - 28 - 4  # leave room for terminal nub
     by = y + (STATUS_BAR_H - 14) // 2
     bw, bh = 28, 14
 
-    if charging:
-        # Voltage is masked by the charger's constant-voltage phase while plugged
-        # in (see design doc problem 3), so showing a percentage here would lie.
-        label_text = "Lädt"
-        label_bbox = font.getbbox(label_text)
-        label_w = label_bbox[2] - label_bbox[0]
-        bolt_w, bolt_h = 10, 14
-        bolt_x = bx - label_w - 6 - bolt_w - 4
-        bolt_y = y + 6
-        # Lightning bolt as a simple zig-zag polygon (no font glyph for U+26A1).
-        draw.polygon(
-            [
-                (bolt_x + bolt_w * 0.55, bolt_y),
-                (bolt_x, bolt_y + bolt_h * 0.6),
-                (bolt_x + bolt_w * 0.4, bolt_y + bolt_h * 0.6),
-                (bolt_x + bolt_w * 0.15, bolt_y + bolt_h),
-                (bolt_x + bolt_w, bolt_y + bolt_h * 0.35),
-                (bolt_x + bolt_w * 0.55, bolt_y + bolt_h * 0.35),
-            ],
-            fill=BLACK,
-        )
-        draw.text((bx - label_w - 6, y + 6), label_text, fill=BLACK, font=font)
-    else:
+    if not charging:
         pct_text = f"{int(battery_pct)}%"
         pct_bbox = font.getbbox(pct_text)
         pct_w = pct_bbox[2] - pct_bbox[0]
@@ -137,10 +115,31 @@ def _draw_status_bar(
         [bx + bw, by + (bh - nub_h) // 2, bx + bw + nub_w, by + (bh + nub_h) // 2],
         fill=BLACK,
     )
-    # Fill bar
-    fill_w = max(0, int((bw - 4) * battery_pct / 100))
-    if fill_w > 0:
-        draw.rectangle([bx + 2, by + 2, bx + 2 + fill_w, by + bh - 2], fill=BLACK)
+
+    if charging:
+        # Voltage is masked by the charger's constant-voltage phase while
+        # plugged in (see design doc problem 3), so a level-based fill would
+        # lie — fill the whole body solid black and cut a white bolt out of it.
+        draw.rectangle([bx + 2, by + 2, bx + bw - 2, by + bh - 2], fill=BLACK)
+        bolt_w, bolt_h = 9, 12
+        bolt_x = bx + (bw - bolt_w) // 2
+        bolt_y = by + (bh - bolt_h) // 2
+        draw.polygon(
+            [
+                (bolt_x + bolt_w * 0.55, bolt_y),
+                (bolt_x, bolt_y + bolt_h * 0.6),
+                (bolt_x + bolt_w * 0.4, bolt_y + bolt_h * 0.6),
+                (bolt_x + bolt_w * 0.15, bolt_y + bolt_h),
+                (bolt_x + bolt_w, bolt_y + bolt_h * 0.35),
+                (bolt_x + bolt_w * 0.55, bolt_y + bolt_h * 0.35),
+            ],
+            fill=WHITE,
+        )
+    else:
+        # Fill bar
+        fill_w = max(0, int((bw - 4) * battery_pct / 100))
+        if fill_w > 0:
+            draw.rectangle([bx + 2, by + 2, bx + 2 + fill_w, by + bh - 2], fill=BLACK)
 
     # Separator line
     draw.line([(0, y + STATUS_BAR_H - 1), (DISPLAY_WIDTH, y + STATUS_BAR_H - 1)], fill=BLACK, width=2)

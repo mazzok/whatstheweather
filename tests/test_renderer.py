@@ -72,3 +72,17 @@ def test_render_display_charging_defaults_to_false():
     img_default = render_display(_sample_weather(), battery_pct=78, off_grid_days=2450, city="Wien")
     img_explicit_false = render_display(_sample_weather(), battery_pct=78, off_grid_days=2450, city="Wien", charging=False)
     assert list(img_default.getdata()) == list(img_explicit_false.getdata())
+
+
+def test_render_display_charging_ignores_battery_level_for_fill():
+    # Cutout style fills the whole battery body solid black regardless of the
+    # reported level — the level reading is unreliable while charging (charger
+    # holds the cell at ~constant voltage), so a 5% reading must look identical
+    # to a 95% reading while charging: fully filled, not a thin sliver.
+    img_low_charging = render_display(_sample_weather(), battery_pct=5, off_grid_days=0, city="Wien", charging=True)
+    img_low_not_charging = render_display(_sample_weather(), battery_pct=5, off_grid_days=0, city="Wien", charging=False)
+    black_charging = sum(1 for p in img_low_charging.getdata() if p < 10)
+    black_not_charging = sum(1 for p in img_low_not_charging.getdata() if p < 10)
+    # At 5% the non-charging fill bar is nearly empty; charging fills the whole
+    # body, so it must contain noticeably more black pixels.
+    assert black_charging > black_not_charging + 50
