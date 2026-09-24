@@ -443,7 +443,7 @@ def _draw_chart(
             # Extra breathing room above the (larger) today glyph so it clears
             # the icon the same way the old below-icon placement did. Falls
             # back to the old below-icon spot if the plot area is too short.
-            above_gap = 8
+            above_gap = 20
             avg_y_above = py - icon_sz // 2 - above_gap - avg_h
             avg_y = avg_y_above if avg_y_above >= chart_top else below_y
         else:

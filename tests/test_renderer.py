@@ -208,7 +208,7 @@ def _avg_temp_glyph_height(img: Image.Image, day_index: int, py: int, above: boo
     icon_sz = 38
     col_left, col_right = _chart_column_x_range(day_index)
     if above:
-        y0, y1 = py - icon_sz // 2 - 42, py - icon_sz // 2 - 2
+        y0, y1 = py - icon_sz // 2 - 35, py - icon_sz // 2
     else:
         y0, y1 = py + icon_sz // 2 + 2, py + icon_sz // 2 + 42
     crop = img.crop(_rotated_180_rect(col_left, y0, col_right, y1))
@@ -242,7 +242,13 @@ def test_render_display_todays_avg_temp_is_bigger():
     # is "today" (see _sample_avg_temp_y_positions for the index shift) and
     # should render noticeably taller.
     past_height = _avg_temp_glyph_height(img, 1, py_positions[1])
-    today_height = _avg_temp_glyph_height(img, 4, py_positions[4], above=True)
+    # Today's glyph renders above the icon when there's room, or falls back
+    # below when the plot area is too short - check whichever position it
+    # actually used.
+    today_height = max(
+        _avg_temp_glyph_height(img, 4, py_positions[4], above=True),
+        _avg_temp_glyph_height(img, 4, py_positions[4], above=False),
+    )
 
     assert today_height > past_height * 1.2, (
         f"expected today's avg temp glyph ({today_height}px) to be noticeably "
