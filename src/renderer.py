@@ -438,10 +438,16 @@ def _draw_chart(
         avg_bbox = draw.textbbox((0, 0), avg_str, font=avg_font)
         avg_w = avg_bbox[2] - avg_bbox[0]
         avg_h = avg_bbox[3] - avg_bbox[1]
+        below_y = py + icon_sz // 2 + 4
         if is_today_flag:
-            avg_y = py - icon_sz // 2 - 4 - avg_h
+            # Extra breathing room above the (larger) today glyph so it clears
+            # the icon the same way the old below-icon placement did. Falls
+            # back to the old below-icon spot if the plot area is too short.
+            above_gap = 8
+            avg_y_above = py - icon_sz // 2 - above_gap - avg_h
+            avg_y = avg_y_above if avg_y_above >= chart_top else below_y
         else:
-            avg_y = py + icon_sz // 2 + 4
+            avg_y = below_y
         draw.text((px - avg_w // 2, avg_y), avg_str, fill=dot_color, font=avg_font)
 
     # --- Header row above the plot: weekday name for every day ---
