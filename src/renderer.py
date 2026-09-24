@@ -102,11 +102,10 @@ def _draw_status_bar(
     by = y + (STATUS_BAR_H - 14) // 2
     bw, bh = 28, 14
 
-    if not charging:
-        pct_text = f"{int(battery_pct)}%"
-        pct_bbox = font.getbbox(pct_text)
-        pct_w = pct_bbox[2] - pct_bbox[0]
-        draw.text((bx - pct_w - 6, y + 6), pct_text, fill=BLACK, font=font)
+    pct_text = f"{int(battery_pct)}%"
+    pct_bbox = font.getbbox(pct_text)
+    pct_w = pct_bbox[2] - pct_bbox[0]
+    draw.text((bx - pct_w - 6, y + 6), pct_text, fill=BLACK, font=font)
 
     draw.rectangle([bx, by, bx + bw, by + bh], outline=BLACK, width=2)
     # Terminal nub (3×7 centred on right edge)
