@@ -432,12 +432,18 @@ def _draw_chart(
         icon_y = py - icon_sz // 2
         draw_icon(draw, p[4], icon_x, icon_y, icon_sz, dot_color, outline_only=is_future)
 
-        # Avg temperature below the icon
+        # Avg temperature: below the icon for past/future days, above it for
+        # today so the current reading stands out at a glance.
         avg_font = font_dot_temp_today if is_today_flag else font_dot_temp
         avg_str = f"{int(round(p[3]))}°"
         avg_bbox = draw.textbbox((0, 0), avg_str, font=avg_font)
         avg_w = avg_bbox[2] - avg_bbox[0]
-        draw.text((px - avg_w // 2, py + icon_sz // 2 + 4), avg_str, fill=dot_color, font=avg_font)
+        avg_h = avg_bbox[3] - avg_bbox[1]
+        if is_today_flag:
+            avg_y = py - icon_sz // 2 - 4 - avg_h
+        else:
+            avg_y = py + icon_sz // 2 + 4
+        draw.text((px - avg_w // 2, avg_y), avg_str, fill=dot_color, font=avg_font)
 
     # --- Header row above the plot: weekday name for every day ---
     font_day = _load_font(True, 20)

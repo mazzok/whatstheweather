@@ -199,14 +199,18 @@ def test_render_display_only_todays_minmax_shown_below_chart():
     )
 
 
-def _avg_temp_glyph_height(img: Image.Image, day_index: int, py: int) -> int:
-    # Window just below the icon, tight enough to avoid the chart's dashed
-    # gridlines. Background may be light (past/future days) or black (today,
-    # inside the highlight bar), so detect "content" rows relative to the
-    # crop's own corner pixel rather than a fixed background value.
+def _avg_temp_glyph_height(img: Image.Image, day_index: int, py: int, above: bool = False) -> int:
+    # Window just below (or, for today, above) the icon, tight enough to
+    # avoid the chart's dashed gridlines. Background may be light
+    # (past/future days) or black (today, inside the highlight bar), so
+    # detect "content" rows relative to the crop's own corner pixel rather
+    # than a fixed background value.
     icon_sz = 38
     col_left, col_right = _chart_column_x_range(day_index)
-    y0, y1 = py + icon_sz // 2 + 2, py + icon_sz // 2 + 42
+    if above:
+        y0, y1 = py - icon_sz // 2 - 42, py - icon_sz // 2 - 2
+    else:
+        y0, y1 = py + icon_sz // 2 + 2, py + icon_sz // 2 + 42
     crop = img.crop(_rotated_180_rect(col_left, y0, col_right, y1))
     w, h = crop.size
     pixels = crop.load()
@@ -238,7 +242,7 @@ def test_render_display_todays_avg_temp_is_bigger():
     # is "today" (see _sample_avg_temp_y_positions for the index shift) and
     # should render noticeably taller.
     past_height = _avg_temp_glyph_height(img, 1, py_positions[1])
-    today_height = _avg_temp_glyph_height(img, 4, py_positions[4])
+    today_height = _avg_temp_glyph_height(img, 4, py_positions[4], above=True)
 
     assert today_height > past_height * 1.2, (
         f"expected today's avg temp glyph ({today_height}px) to be noticeably "
