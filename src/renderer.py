@@ -257,6 +257,7 @@ def _draw_chart(
     font_avg = _load_font(True, 22)       # was 15, then 19
     font_yaxis = _load_font(True, 19)     # was 15
     font_today_minmax = _load_font(True, 22)  # 2x the old 11px axis min/max font
+    font_minmax_small = _load_font(True, 11)  # non-today footer min/max
 
     # Layout
     chart_left = SIDE_PADDING + CHART_MARGIN_LEFT
@@ -465,14 +466,23 @@ def _draw_chart(
         lw = bbox[2] - bbox[0]
         draw.text((px - lw // 2, header_y), wd, fill=lbl_color, font=font_day)
 
-    # --- Footer row below the plot: only today's min/max, at 2x the size ---
-    if today_idx is not None and points[today_idx] is not None:
-        _, t_min, t_max, _, _ = points[today_idx]
+    # --- Footer row below the plot: min/max for every day. Today's stands
+    # out at 2x the size; past/future days use the smaller original size.
+    # Colors follow the same past/today/future scheme as the header and
+    # avg-temp labels above.
+    for i, p in enumerate(points):
+        if p is None:
+            continue
+        _, t_min, t_max, _, _ = p
+        is_past = _is_past(i)
+        is_today_flag = _is_today(i)
+        lbl_color = WHITE if is_today_flag else (GRAY if is_past else BLACK)
+        font_mm = font_today_minmax if is_today_flag else font_minmax_small
         minmax_str = f"{int(round(t_min))}° / {int(round(t_max))}°"
-        mm_bbox = draw.textbbox((0, 0), minmax_str, font=font_today_minmax)
+        mm_bbox = draw.textbbox((0, 0), minmax_str, font=font_mm)
         mm_w = mm_bbox[2] - mm_bbox[0]
-        px = day_x(today_idx)
-        draw.text((px - mm_w // 2, chart_bottom + 6), minmax_str, fill=WHITE, font=font_today_minmax)
+        px = day_x(i)
+        draw.text((px - mm_w // 2, chart_bottom + 6), minmax_str, fill=lbl_color, font=font_mm)
 
 
 # ---------------------------------------------------------------------------

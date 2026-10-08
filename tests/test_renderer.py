@@ -182,20 +182,22 @@ def test_render_display_weekday_label_sits_above_plot():
     )
 
 
-def test_render_display_only_todays_minmax_shown_below_chart():
+def test_render_display_every_day_shows_minmax_below_chart():
     with patch("src.renderer.date") as mock_date:
         mock_date.today.return_value = date(2026, 4, 17)
         img = render_display(_sample_weather(), battery_pct=78, off_grid_days=2450, city="Wien")
 
-    # day_index 0 (2026-04-14, Monday) is never "today" - its column must have
-    # no temperature text left in the bottom label area. Start a few pixels
-    # below DISPLAY_HEIGHT - 40 to skip over the chart's x-axis line itself,
-    # which legitimately spans every column.
-    col_left, col_right = _chart_column_x_range(0)
+    # day_index 0 (2026-04-14, Monday) has no matching forecast entry in the
+    # sample week (see _sample_avg_temp_y_positions), so it legitimately has
+    # no footer text. day_index 1 (2026-04-15, Tuesday) is a "past" day with
+    # data and must now show its min/max below the chart, same as today.
+    col_left, col_right = _chart_column_x_range(1)
     footer_band = img.crop(_rotated_180_rect(col_left, DISPLAY_HEIGHT - 32, col_right, DISPLAY_HEIGHT))
     footer_pixels = list(footer_band.getdata())
-    assert all(p > 100 for p in footer_pixels), (
-        "non-today columns must not show min/max text below the chart anymore"
+    # Past days render their min/max in GRAY (160), lighter than BLACK but
+    # still clearly darker than the white (255) background.
+    assert any(p < 200 for p in footer_pixels), (
+        "past/future columns must show min/max text below the chart"
     )
 
 
