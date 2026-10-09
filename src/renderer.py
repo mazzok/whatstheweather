@@ -31,6 +31,13 @@ WHITE = 255
 
 WEEKDAYS = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
 
+# 8-sector compass bearings (clockwise from north), matching the sectors
+# weather.wind_speed_and_direction() quantizes wind angle into.
+COMPASS_ANGLES = {
+    "N": 0, "NE": 45, "E": 90, "SE": 135,
+    "S": 180, "SW": 225, "W": 270, "NW": 315,
+}
+
 # Font paths relative to project root
 _PROJECT_ROOT = Path(__file__).parent.parent
 _FONT_REGULAR = str(_PROJECT_ROOT / "fonts" / "Inter-Regular.ttf")
@@ -43,6 +50,22 @@ def _load_font(bold: bool, size: int) -> ImageFont.FreeTypeFont:
         return ImageFont.truetype(path, size)
     except OSError:
         return ImageFont.load_default()
+
+
+def _draw_compass(draw: ImageDraw.Draw, cx: int, cy: int, r: int, direction: str) -> None:
+    """Draw a compass rose: a ring with a kite-shaped pointer whose base chord
+    sits flush on the ring (no shaft sticking out the back) and whose tip
+    pokes just past the rim toward the given compass direction. North is up.
+    """
+    angle = math.radians(COMPASS_ANGLES.get(direction, 0))
+    angle_l = angle - math.radians(22)
+    angle_r = angle + math.radians(22)
+    tip = (cx + r * 1.32 * math.sin(angle), cy - r * 1.32 * math.cos(angle))
+    base_l = (cx + r * math.sin(angle_l), cy - r * math.cos(angle_l))
+    base_r = (cx + r * math.sin(angle_r), cy - r * math.cos(angle_r))
+    draw.ellipse([cx - r, cy - r, cx + r, cy + r], outline=BLACK, width=2)
+    draw.ellipse([cx - 2, cy - 2, cx + 2, cy + 2], fill=BLACK)
+    draw.polygon([tip, base_l, base_r], fill=BLACK)
 
 
 # ---------------------------------------------------------------------------
@@ -180,15 +203,19 @@ def _draw_weather_section(
     draw.text((minmax_x, y + 14), f"\u2191 {int(round(weather.temp_max_today))}°", fill=BLACK, font=font_minmax)
     draw.text((minmax_x, y + 34), f"\u2193 {int(round(weather.temp_min_today))}°", fill=BLACK, font=font_minmax)
 
-    # Wind top-right of left area, right-aligned
+    # Wind top-right of left area, right-aligned. Direction is shown as a
+    # small compass rose instead of a letter (N/NW/...) so it reads at a
+    # glance without relying on text.
     divider_x = DISPLAY_WIDTH // 2 + 60
-    wind_str = f"{int(round(weather.wind_speed))} km/h {weather.wind_direction}"
+    wind_str = f"{int(round(weather.wind_speed))} km/h"
     wind_bbox = draw.textbbox((0, 0), wind_str, font=font_wind)
     wind_w = wind_bbox[2] - wind_bbox[0]
     wind_icon_sz = 48
     wind_total = wind_icon_sz + 8 + wind_w
     wind_start_x = divider_x - 16 - wind_total
-    draw_icon(draw, "windy", wind_start_x, y + 4, wind_icon_sz, BLACK)
+    compass_cx = wind_start_x + wind_icon_sz // 2
+    compass_cy = y + 4 + wind_icon_sz // 2
+    _draw_compass(draw, compass_cx, compass_cy, 18, weather.wind_direction)
     draw.text((wind_start_x + wind_icon_sz + 8, y + 16), wind_str, fill=BLACK, font=font_wind)
 
     # Weather icon + label (row 1)
@@ -257,7 +284,6 @@ def _draw_chart(
     font_avg = _load_font(True, 22)       # was 15, then 19
     font_yaxis = _load_font(True, 19)     # was 15
     font_today_minmax = _load_font(True, 22)  # 2x the old 11px axis min/max font
-    font_minmax_small = _load_font(True, 11)  # non-today footer min/max
 
     # Layout
     chart_left = SIDE_PADDING + CHART_MARGIN_LEFT
@@ -466,18 +492,19 @@ def _draw_chart(
         lw = bbox[2] - bbox[0]
         draw.text((px - lw // 2, header_y), wd, fill=lbl_color, font=font_day)
 
-    # --- Footer row below the plot: min/max for every day. Today's stands
-    # out at 2x the size; past/future days use the smaller original size.
-    # Colors follow the same past/today/future scheme as the header and
-    # avg-temp labels above.
+    # --- Footer row below the plot: min/max for today and upcoming days,
+    # both rendered at the same bold size so future days stand out just as
+    # clearly as today. Past days are no longer relevant and show nothing.
     for i, p in enumerate(points):
         if p is None:
             continue
-        _, t_min, t_max, _, _ = p
         is_past = _is_past(i)
+        if is_past:
+            continue
+        _, t_min, t_max, _, _ = p
         is_today_flag = _is_today(i)
-        lbl_color = WHITE if is_today_flag else (GRAY if is_past else BLACK)
-        font_mm = font_today_minmax if is_today_flag else font_minmax_small
+        lbl_color = WHITE if is_today_flag else BLACK
+        font_mm = font_today_minmax
         minmax_str = f"{int(round(t_min))}° / {int(round(t_max))}°"
         mm_bbox = draw.textbbox((0, 0), minmax_str, font=font_mm)
         mm_w = mm_bbox[2] - mm_bbox[0]

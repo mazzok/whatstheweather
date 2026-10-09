@@ -182,22 +182,54 @@ def test_render_display_weekday_label_sits_above_plot():
     )
 
 
-def test_render_display_every_day_shows_minmax_below_chart():
+def test_render_display_past_days_show_no_minmax_below_chart():
     with patch("src.renderer.date") as mock_date:
         mock_date.today.return_value = date(2026, 4, 17)
         img = render_display(_sample_weather(), battery_pct=78, off_grid_days=2450, city="Wien")
 
-    # day_index 0 (2026-04-14, Monday) has no matching forecast entry in the
-    # sample week (see _sample_avg_temp_y_positions), so it legitimately has
-    # no footer text. day_index 1 (2026-04-15, Tuesday) is a "past" day with
-    # data and must now show its min/max below the chart, same as today.
+    # day_index 1 (2026-04-14, Tuesday) is a "past" day with forecast data
+    # (see _sample_avg_temp_y_positions) - past min/max is no longer needed
+    # and must not be drawn below the chart.
     col_left, col_right = _chart_column_x_range(1)
     footer_band = img.crop(_rotated_180_rect(col_left, DISPLAY_HEIGHT - 32, col_right, DISPLAY_HEIGHT))
     footer_pixels = list(footer_band.getdata())
-    # Past days render their min/max in GRAY (160), lighter than BLACK but
-    # still clearly darker than the white (255) background.
-    assert any(p < 200 for p in footer_pixels), (
-        "past/future columns must show min/max text below the chart"
+    assert all(p > 200 for p in footer_pixels), (
+        "past columns must not show min/max text below the chart"
+    )
+
+
+def test_render_display_wind_compass_rotates_with_direction():
+    weather_n = _sample_weather()
+    weather_n.wind_direction = "N"
+    weather_s = _sample_weather()
+    weather_s.wind_direction = "S"
+
+    img_n = render_display(weather_n, battery_pct=78, off_grid_days=2450, city="Wien")
+    img_s = render_display(weather_s, battery_pct=78, off_grid_days=2450, city="Wien")
+
+    # Generous box around the wind compass icon (top-right of the weather
+    # section, see _draw_weather_section) - large enough to catch the
+    # pointer regardless of minor layout drift.
+    box = _rotated_180_rect(305, 30, 365, 90)
+    pixels_n = list(img_n.crop(box).getdata())
+    pixels_s = list(img_s.crop(box).getdata())
+    assert pixels_n != pixels_s, (
+        "compass icon must render differently for different wind directions"
+    )
+
+
+def test_render_display_future_days_show_bold_minmax_below_chart():
+    with patch("src.renderer.date") as mock_date:
+        mock_date.today.return_value = date(2026, 4, 17)
+        img = render_display(_sample_weather(), battery_pct=78, off_grid_days=2450, city="Wien")
+
+    # day_index 5 (2026-04-18, Saturday) is a future day with forecast data
+    # and must show its min/max below the chart, as bold/large as today's.
+    col_left, col_right = _chart_column_x_range(5)
+    footer_band = img.crop(_rotated_180_rect(col_left, DISPLAY_HEIGHT - 32, col_right, DISPLAY_HEIGHT))
+    footer_pixels = list(footer_band.getdata())
+    assert any(p < 100 for p in footer_pixels), (
+        "future columns must show bold (black) min/max text below the chart"
     )
 
 
