@@ -356,16 +356,47 @@ def fetch_current_weather(station_id: str) -> dict | None:
             return None
         data = resp.json()
         params = data["features"][0]["properties"]["parameters"]
-        return {
+        obs = {
             "TL": params["TL"]["data"][-1],
             "RF": params["RF"]["data"][-1],
             "DD": params["DD"]["data"][-1],
             "FF": params["FF"]["data"][-1],
             "RR": params["RR"]["data"][-1],
         }
+        if any(obs[k] is None for k in ("TL", "DD", "FF")):
+            logger.warning("TAWES station %s reported missing values", station_id)
+            return None
+        return obs
     except Exception as exc:
         logger.error("fetch_current_weather error: %s", exc)
         return None
+
+
+def _drop_missing_hours(forecast_data: dict | None) -> dict | None:
+    """Remove forecast hours without temperature or wind values.
+
+    GeoSphere occasionally returns hours where every parameter is null.
+    Returns None if no usable hour remains, so callers treat it as a failed fetch.
+    """
+    if not forecast_data:
+        return None
+    timestamps = forecast_data.get("timestamps", [])
+    params = forecast_data["features"][0]["properties"]["parameters"]
+    required = [params[k]["data"] for k in ("t2m", "u10m", "v10m")]
+    keep = [
+        i for i in range(len(timestamps))
+        if all(i < len(data) and data[i] is not None for data in required)
+    ]
+    if not keep:
+        logger.error("Forecast contains no usable hours")
+        return None
+    return {
+        "timestamps": [timestamps[i] for i in keep],
+        "features": [{"properties": {"parameters": {
+            name: {**param, "data": [param["data"][i] if i < len(param["data"]) else None for i in keep]}
+            for name, param in params.items()
+        }}}],
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -395,7 +426,7 @@ def get_weather(lat: float, lon: float) -> WeatherData:
     TAWES unavailable; returns WeatherData with error set if the forecast
     fails. Old data is never reused.
     """
-    forecast_data = fetch_forecast(lat, lon)
+    forecast_data = _drop_missing_hours(fetch_forecast(lat, lon))
 
     # Try to get current observation from TAWES
     current_obs: dict | None = None
@@ -479,7 +510,7 @@ def get_weather(lat: float, lon: float) -> WeatherData:
             if ts[:10] == today_str
         ]
         if today_precip:
-            precip_prob = (sum(1 for v in today_precip if v > 0) / len(today_precip)) * 100
+            precip_prob = (sum(1 for v in today_precip if v is not None and v > 0) / len(today_precip)) * 100
         else:
             precip_prob = 0.0
 

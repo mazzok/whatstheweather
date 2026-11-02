@@ -359,6 +359,16 @@ class TestFetchCurrentWeather:
             result = fetch_current_weather("11035")
         assert result is None
 
+    def test_missing_values_return_none(self):
+        response = self._make_tawes_response()
+        response["features"][0]["properties"]["parameters"]["TL"]["data"] = [None]
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = response
+        with patch("src.weather.requests.get", return_value=mock_response):
+            result = fetch_current_weather("11035")
+        assert result is None
+
 
 # ---------------------------------------------------------------------------
 # get_weather — fully mocked assembly
@@ -443,6 +453,33 @@ class TestGetWeather:
         assert isinstance(result, WeatherData)
         assert result.error != ""
         assert result.week == []
+
+    def test_all_null_forecast_returns_error(self):
+        """GeoSphere sometimes returns hours with every value null (seen 2026-11-02)."""
+        forecast = self._make_forecast_data()
+        for param in forecast["features"][0]["properties"]["parameters"].values():
+            param["data"] = [None] * len(param["data"])
+        with patch("src.weather.fetch_station_metadata", return_value=[]), \
+             patch("src.weather.fetch_forecast", return_value=forecast):
+            result = get_weather(48.2082, 16.3738)
+
+        assert result.error != ""
+        assert result.week == []
+
+    def test_null_forecast_hours_are_skipped(self):
+        forecast = self._make_forecast_data()
+        params = forecast["features"][0]["properties"]["parameters"]
+        for key in params:
+            params[key]["data"][0] = None
+        params["rr_acc"]["data"][5] = None
+        with patch("src.weather.fetch_station_metadata", return_value=[]), \
+             patch("src.weather.fetch_forecast", return_value=forecast), \
+             patch("src.weather.fetch_openmeteo_daily", return_value=[]):
+            result = get_weather(48.2082, 16.3738)
+
+        assert result.error == ""
+        assert result.current_temp == pytest.approx(15.0)
+        assert all(d.temp_min is not None and d.temp_max is not None for d in result.week)
 
     def test_forecast_failure_never_reads_old_data_from_disk(self):
         """A failed fetch must not fall back to previously stored weather data."""

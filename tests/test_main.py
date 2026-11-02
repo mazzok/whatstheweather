@@ -75,6 +75,50 @@ class TestMainReconciliation:
         assert wittypi.reconcile_schedule.call_count == 1
 
 
+class TestMainCrashHandling:
+    @patch("src.main.subprocess.run")
+    @patch("src.main.run_once", side_effect=TypeError("boom"))
+    @patch("src.main.WittyPi")
+    @patch("src.main.load_config")
+    def test_main_logs_exception_and_still_shuts_down(
+        self, mock_load_config, mock_wittypi_cls, mock_run_once, mock_subprocess_run, caplog
+    ):
+        from src.main import main
+
+        mock_load_config.return_value = {"debug": False, "interval": 60}
+        wittypi = MagicMock()
+        wittypi.is_charging.return_value = False
+        wittypi.battery_percentage.return_value = 80
+        wittypi.get_off_grid_days.return_value = 0
+        mock_wittypi_cls.return_value = wittypi
+
+        with patch.object(sys, "argv", ["main.py"]), patch("src.main.logging.basicConfig"):
+            main()
+
+        assert "boom" in caplog.text
+        mock_subprocess_run.assert_called_with(["sudo", "shutdown", "-h", "now"])
+
+    @patch("src.main.subprocess.run")
+    @patch("src.main._run_charging_mode", side_effect=TypeError("boom"))
+    @patch("src.main.WittyPi")
+    @patch("src.main.load_config")
+    def test_charging_crash_logs_exception_and_still_shuts_down(
+        self, mock_load_config, mock_wittypi_cls, mock_charging, mock_subprocess_run, caplog
+    ):
+        from src.main import main
+
+        mock_load_config.return_value = {"debug": False, "interval": 60}
+        wittypi = MagicMock()
+        wittypi.is_charging.return_value = True
+        mock_wittypi_cls.return_value = wittypi
+
+        with patch.object(sys, "argv", ["main.py"]), patch("src.main.logging.basicConfig"):
+            main()
+
+        assert "boom" in caplog.text
+        mock_subprocess_run.assert_called_with(["sudo", "shutdown", "-h", "now"])
+
+
 class TestWaitForNetwork:
     @patch("src.main.time.sleep")
     @patch("src.main.subprocess.run")

@@ -151,12 +151,19 @@ def main() -> None:
             logger.info("Next update in %d seconds", config["interval"])
             time.sleep(config["interval"])
     elif wittypi.is_charging():
-        _run_charging_mode(config, wittypi)
+        # A crash must not keep the Pi awake with a stale screen; always shut down.
+        try:
+            _run_charging_mode(config, wittypi)
+        except Exception:
+            logger.exception("Update failed while charging")
         subprocess.run(["sudo", "shutdown", "-h", "now"])
     else:
-        battery_pct = wittypi.battery_percentage()
-        off_grid_days = wittypi.get_off_grid_days()
-        run_once(config, battery_pct, off_grid_days, charging=wittypi.is_charging())
+        try:
+            battery_pct = wittypi.battery_percentage()
+            off_grid_days = wittypi.get_off_grid_days()
+            run_once(config, battery_pct, off_grid_days, charging=wittypi.is_charging())
+        except Exception:
+            logger.exception("Update failed")
         logger.info("Shutting down...")
         subprocess.run(["sudo", "shutdown", "-h", "now"])
 
