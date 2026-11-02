@@ -14,8 +14,6 @@ from src.weather import (
     fetch_forecast,
     fetch_current_weather,
     get_weather,
-    _save_cache,
-    _load_cache,
     WeatherData,
     DayForecast,
 )
@@ -363,73 +361,6 @@ class TestFetchCurrentWeather:
 
 
 # ---------------------------------------------------------------------------
-# Cache
-# ---------------------------------------------------------------------------
-
-class TestCache:
-    def _sample_weather(self):
-        return WeatherData(
-            current_temp=18.5,
-            current_icon="clear",
-            current_desc="Sonnig",
-            wind_speed=18.0,
-            wind_direction="W",
-            precip_probability=5.0,
-            temp_min_today=12.0,
-            temp_max_today=22.0,
-            week=[
-                DayForecast(date=date(2026, 4, 17), temp_min=12.0, temp_max=22.0, temp_avg=17.0, icon="clear")
-            ],
-            timestamp="2026-04-17T10:00:00",
-        )
-
-    def test_save_and_load_roundtrip(self):
-        weather = self._sample_weather()
-        written = {}
-
-        def fake_open(path, mode="r", **kwargs):
-            import io
-            if "w" in mode:
-                buf = io.StringIO()
-                original_close = buf.close
-
-                def capture_close():
-                    written["data"] = buf.getvalue()
-                    original_close()
-
-                buf.close = capture_close
-                return buf
-            elif "r" in mode:
-                if "data" not in written:
-                    raise FileNotFoundError
-                return io.StringIO(written["data"])
-            raise FileNotFoundError
-
-        with patch("builtins.open", side_effect=fake_open):
-            _save_cache(weather)
-            loaded = _load_cache()
-
-        assert loaded is not None
-        assert loaded.current_temp == pytest.approx(18.5)
-        assert loaded.current_icon == "clear"
-        assert loaded.wind_direction == "W"
-        assert len(loaded.week) == 1
-        assert loaded.week[0].date == date(2026, 4, 17)
-        assert loaded.week[0].icon == "clear"
-
-    def test_load_cache_missing_file_returns_none(self):
-        with patch("builtins.open", side_effect=FileNotFoundError):
-            result = _load_cache()
-        assert result is None
-
-    def test_load_cache_corrupt_json_returns_none(self):
-        import io
-        with patch("builtins.open", return_value=io.StringIO("not valid json {")):
-            result = _load_cache()
-        assert result is None
-
-
-# ---------------------------------------------------------------------------
 # get_weather — fully mocked assembly
 # ---------------------------------------------------------------------------
 
@@ -482,8 +413,7 @@ class TestGetWeather:
     def test_successful_assembly(self):
         with patch("src.weather.fetch_station_metadata", return_value=self._make_metadata()), \
              patch("src.weather.fetch_current_weather", return_value=self._make_tawes_data()), \
-             patch("src.weather.fetch_forecast", return_value=self._make_forecast_data()), \
-             patch("src.weather._save_cache"):
+             patch("src.weather.fetch_forecast", return_value=self._make_forecast_data()):
             result = get_weather(48.2082, 16.3738)
 
         assert isinstance(result, WeatherData)
@@ -497,44 +427,37 @@ class TestGetWeather:
     def test_no_stations_uses_forecast_data(self):
         """When station metadata fails, weather should still return data (from forecast) or error gracefully."""
         with patch("src.weather.fetch_station_metadata", return_value=[]), \
-             patch("src.weather.fetch_forecast", return_value=self._make_forecast_data()), \
-             patch("src.weather._save_cache"):
+             patch("src.weather.fetch_forecast", return_value=self._make_forecast_data()):
             result = get_weather(48.2082, 16.3738)
 
         assert isinstance(result, WeatherData)
         # Either returns partial data from forecast or error — must not raise
         assert result is not None
 
-    def test_forecast_failure_uses_cache(self):
-        """When API completely fails, should try to return cached data."""
-        cached = WeatherData(
-            current_temp=15.0, current_icon="clear", current_desc="Sonnig",
-            wind_speed=10.0, wind_direction="N", precip_probability=0.0,
-            temp_min_today=10.0, temp_max_today=20.0,
-            timestamp="2026-04-17T08:00:00",
-        )
-        with patch("src.weather.fetch_station_metadata", return_value=[]), \
-             patch("src.weather.fetch_forecast", return_value=None), \
-             patch("src.weather._load_cache", return_value=cached):
-            result = get_weather(48.2082, 16.3738)
-
-        assert result is not None
-
     def test_returns_error_on_total_failure(self):
-        """When everything fails and no cache, return WeatherData with error set."""
+        """When the forecast fails, return WeatherData with error set and no week data."""
         with patch("src.weather.fetch_station_metadata", return_value=[]), \
-             patch("src.weather.fetch_forecast", return_value=None), \
-             patch("src.weather._load_cache", return_value=None):
+             patch("src.weather.fetch_forecast", return_value=None):
             result = get_weather(48.2082, 16.3738)
 
         assert isinstance(result, WeatherData)
+        assert result.error != ""
+        assert result.week == []
+
+    def test_forecast_failure_never_reads_old_data_from_disk(self):
+        """A failed fetch must not fall back to previously stored weather data."""
+        with patch("src.weather.fetch_station_metadata", return_value=[]), \
+             patch("src.weather.fetch_forecast", return_value=None), \
+             patch("builtins.open") as mock_open_:
+            result = get_weather(48.2082, 16.3738)
+
+        mock_open_.assert_not_called()
         assert result.error != ""
 
     def test_week_sorted_by_date(self):
         with patch("src.weather.fetch_station_metadata", return_value=self._make_metadata()), \
              patch("src.weather.fetch_current_weather", return_value=self._make_tawes_data()), \
-             patch("src.weather.fetch_forecast", return_value=self._make_forecast_data()), \
-             patch("src.weather._save_cache"):
+             patch("src.weather.fetch_forecast", return_value=self._make_forecast_data()):
             result = get_weather(48.2082, 16.3738)
 
         dates = [d.date for d in result.week]
@@ -543,8 +466,7 @@ class TestGetWeather:
     def test_timestamp_is_set(self):
         with patch("src.weather.fetch_station_metadata", return_value=self._make_metadata()), \
              patch("src.weather.fetch_current_weather", return_value=self._make_tawes_data()), \
-             patch("src.weather.fetch_forecast", return_value=self._make_forecast_data()), \
-             patch("src.weather._save_cache"):
+             patch("src.weather.fetch_forecast", return_value=self._make_forecast_data()):
             result = get_weather(48.2082, 16.3738)
 
         assert result.timestamp != ""

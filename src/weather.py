@@ -1,11 +1,9 @@
 # src/weather.py
-import json
 import logging
 import math
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
-from pathlib import Path
 
 import requests
 
@@ -17,7 +15,6 @@ logger = logging.getLogger(__name__)
 
 BASE_URL = "https://dataset.api.hub.geosphere.at"
 TIMEOUT = 30
-CACHE_PATH = Path.home() / ".weather_cache.json"
 
 SY_MAP = {
     1: "clear", 2: "clear",
@@ -372,76 +369,6 @@ def fetch_current_weather(station_id: str) -> dict | None:
 
 
 # ---------------------------------------------------------------------------
-# Caching
-# ---------------------------------------------------------------------------
-
-def _save_cache(weather: WeatherData) -> None:
-    """Persist WeatherData to JSON cache file."""
-    try:
-        payload = {
-            "current_temp": weather.current_temp,
-            "current_icon": weather.current_icon,
-            "current_desc": weather.current_desc,
-            "wind_speed": weather.wind_speed,
-            "wind_direction": weather.wind_direction,
-            "precip_probability": weather.precip_probability,
-            "temp_min_today": weather.temp_min_today,
-            "temp_max_today": weather.temp_max_today,
-            "timestamp": weather.timestamp,
-            "error": weather.error,
-            "week": [
-                {
-                    "date": d.date.isoformat(),
-                    "temp_min": d.temp_min,
-                    "temp_max": d.temp_max,
-                    "temp_avg": d.temp_avg,
-                    "icon": d.icon,
-                }
-                for d in weather.week
-            ],
-        }
-        with open(CACHE_PATH, "w", encoding="utf-8") as f:
-            json.dump(payload, f)
-    except Exception as exc:
-        logger.warning("Could not save weather cache: %s", exc)
-
-
-def _load_cache() -> WeatherData | None:
-    """Load WeatherData from JSON cache file. Returns None if unavailable or corrupt."""
-    try:
-        with open(CACHE_PATH, "r", encoding="utf-8") as f:
-            payload = json.load(f)
-        week = [
-            DayForecast(
-                date=date.fromisoformat(d["date"]),
-                temp_min=d["temp_min"],
-                temp_max=d["temp_max"],
-                temp_avg=d["temp_avg"],
-                icon=d["icon"],
-            )
-            for d in payload.get("week", [])
-        ]
-        return WeatherData(
-            current_temp=payload["current_temp"],
-            current_icon=payload["current_icon"],
-            current_desc=payload["current_desc"],
-            wind_speed=payload["wind_speed"],
-            wind_direction=payload["wind_direction"],
-            precip_probability=payload["precip_probability"],
-            temp_min_today=payload["temp_min_today"],
-            temp_max_today=payload["temp_max_today"],
-            week=week,
-            timestamp=payload.get("timestamp", ""),
-            error=payload.get("error", ""),
-        )
-    except FileNotFoundError:
-        return None
-    except Exception as exc:
-        logger.warning("Could not load weather cache: %s", exc)
-        return None
-
-
-# ---------------------------------------------------------------------------
 # Wind direction from degrees (used when station reports DD in degrees)
 # ---------------------------------------------------------------------------
 
@@ -462,11 +389,11 @@ def get_weather(lat: float, lon: float) -> WeatherData:
     1. Fetch TAWES station list and find nearest active station.
     2. Fetch current observation from that station.
     3. Fetch NWP forecast for the coordinates.
-    4. Aggregate into WeatherData, save to cache, return.
+    4. Aggregate into WeatherData and return.
 
     If any step fails gracefully degrades: uses forecast data for current if
-    TAWES unavailable; returns cached data if forecast also fails; returns
-    WeatherData with error set if everything fails.
+    TAWES unavailable; returns WeatherData with error set if the forecast
+    fails. Old data is never reused.
     """
     forecast_data = fetch_forecast(lat, lon)
 
@@ -571,16 +498,9 @@ def get_weather(lat: float, lon: float) -> WeatherData:
             week=day_forecasts,
             timestamp=datetime.now(timezone.utc).isoformat(),
         )
-        _save_cache(weather)
         return weather
 
-    # Forecast failed — try cache
-    cached = _load_cache()
-    if cached is not None:
-        logger.warning("Using cached weather data")
-        return cached
-
-    # Everything failed
+    # Forecast failed — never fall back to old data
     logger.error("All weather sources failed for (%.4f, %.4f)", lat, lon)
     return WeatherData(
         current_temp=0.0,

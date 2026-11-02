@@ -75,6 +75,34 @@ class TestMainReconciliation:
         assert wittypi.reconcile_schedule.call_count == 1
 
 
+class TestWaitForNetwork:
+    @patch("src.main.time.sleep")
+    @patch("src.main.subprocess.run")
+    def test_returns_false_when_ping_fails(self, mock_run, mock_sleep):
+        from src.main import _wait_for_network
+
+        mock_run.return_value = MagicMock(returncode=1)
+        with patch("src.main.time.monotonic", side_effect=[0, 0, 5, 10]):
+            assert _wait_for_network(timeout=8) is False
+
+    @patch("src.main.time.sleep")
+    @patch("src.main.subprocess.run")
+    def test_returns_true_when_ping_succeeds(self, mock_run, mock_sleep):
+        from src.main import _wait_for_network
+
+        mock_run.return_value = MagicMock(returncode=0)
+        assert _wait_for_network(timeout=8) is True
+
+    @patch("src.main.time.sleep")
+    @patch("src.main.subprocess.run")
+    def test_retries_until_ping_succeeds(self, mock_run, mock_sleep):
+        from src.main import _wait_for_network
+
+        mock_run.side_effect = [MagicMock(returncode=2), MagicMock(returncode=0)]
+        assert _wait_for_network(timeout=30) is True
+        assert mock_run.call_count == 2
+
+
 class TestChargingIndicatorThreading:
     @patch("src.main.subprocess.run")
     @patch("src.main.update_display_4gray")

@@ -86,11 +86,13 @@ def render_display(
     img = Image.new("L", (DISPLAY_WIDTH, DISPLAY_HEIGHT), 245)
     draw = ImageDraw.Draw(img)
 
+    error = error or weather.error
+
     y = 0
-    _draw_status_bar(draw, y, battery_pct, off_grid_days, error or weather.error, charging)
+    _draw_status_bar(draw, y, battery_pct, off_grid_days, error, charging)
     y += STATUS_BAR_H
 
-    _draw_weather_section(draw, img, y, weather, city)
+    _draw_weather_section(draw, img, y, weather, city, unavailable=bool(error))
     y += WEATHER_SECTION_H
 
     _draw_chart(draw, img, y, weather)
@@ -177,8 +179,13 @@ def _draw_weather_section(
     y: int,
     weather: WeatherData,
     city: str = "",
+    unavailable: bool = False,
 ) -> None:
-    """Draw the weather band: temp+icons left, date+wind right."""
+    """Draw the weather band: temp+icons left, date+wind right.
+
+    When ``unavailable`` is set, the weather values are placeholders, so the
+    left side shows only "--°C" instead of numbers that look like readings.
+    """
     section_bottom = y + WEATHER_SECTION_H
 
     font_temp_huge = _load_font(True, 72)
@@ -192,45 +199,47 @@ def _draw_weather_section(
 
     # --- LEFT: Temperature (dominant) ---
     temp_x = SIDE_PADDING
-    temp_str = f"{int(round(weather.current_temp))}"
+    temp_str = "--" if unavailable else f"{int(round(weather.current_temp))}"
     draw.text((temp_x, y + 8), temp_str, fill=BLACK, font=font_temp_huge)
     bbox = draw.textbbox((temp_x, y + 8), temp_str, font=font_temp_huge)
     unit_x = bbox[2] + 4
     draw.text((unit_x, y + 14), "°C", fill=BLACK, font=font_temp_unit)
 
-    # Min/max right of °C, top-aligned
-    minmax_x = unit_x + 50
-    draw.text((minmax_x, y + 14), f"\u2191 {int(round(weather.temp_max_today))}°", fill=BLACK, font=font_minmax)
-    draw.text((minmax_x, y + 34), f"\u2193 {int(round(weather.temp_min_today))}°", fill=BLACK, font=font_minmax)
-
-    # Wind top-right of left area, right-aligned. Direction is shown as a
-    # small compass rose instead of a letter (N/NW/...) so it reads at a
-    # glance without relying on text.
     divider_x = DISPLAY_WIDTH // 2 + 60
-    wind_str = f"{int(round(weather.wind_speed))} km/h"
-    wind_bbox = draw.textbbox((0, 0), wind_str, font=font_wind)
-    wind_w = wind_bbox[2] - wind_bbox[0]
-    wind_icon_sz = 48
-    wind_total = wind_icon_sz + 8 + wind_w
-    wind_start_x = divider_x - 16 - wind_total
-    compass_cx = wind_start_x + wind_icon_sz // 2
-    compass_cy = y + 4 + wind_icon_sz // 2
-    _draw_compass(draw, compass_cx, compass_cy, 18, weather.wind_direction)
-    draw.text((wind_start_x + wind_icon_sz + 8, y + 16), wind_str, fill=BLACK, font=font_wind)
 
-    # Weather icon + label (row 1)
-    icon_sz = 48
-    icon1_x = SIDE_PADDING + 10
-    icon1_y = y + 92
-    draw_icon(draw, weather.current_icon, icon1_x, icon1_y, icon_sz, BLACK)
-    desc_label = weather.current_desc
-    draw.text((icon1_x + icon_sz + 8, icon1_y + 14), desc_label, fill=BLACK, font=font_label)
+    if not unavailable:
+        # Min/max right of °C, top-aligned
+        minmax_x = unit_x + 50
+        draw.text((minmax_x, y + 14), f"\u2191 {int(round(weather.temp_max_today))}°", fill=BLACK, font=font_minmax)
+        draw.text((minmax_x, y + 34), f"\u2193 {int(round(weather.temp_min_today))}°", fill=BLACK, font=font_minmax)
 
-    # Rain icon + percentage (row 2, below)
-    icon2_y = icon1_y + icon_sz + 2
-    draw_icon(draw, "rain", icon1_x, icon2_y, icon_sz, BLACK)
-    rain_str = f"{int(round(weather.precip_probability))}%"
-    draw.text((icon1_x + icon_sz + 8, icon2_y + 8), rain_str, fill=BLACK, font=font_label)
+        # Wind top-right of left area, right-aligned. Direction is shown as a
+        # small compass rose instead of a letter (N/NW/...) so it reads at a
+        # glance without relying on text.
+        wind_str = f"{int(round(weather.wind_speed))} km/h"
+        wind_bbox = draw.textbbox((0, 0), wind_str, font=font_wind)
+        wind_w = wind_bbox[2] - wind_bbox[0]
+        wind_icon_sz = 48
+        wind_total = wind_icon_sz + 8 + wind_w
+        wind_start_x = divider_x - 16 - wind_total
+        compass_cx = wind_start_x + wind_icon_sz // 2
+        compass_cy = y + 4 + wind_icon_sz // 2
+        _draw_compass(draw, compass_cx, compass_cy, 18, weather.wind_direction)
+        draw.text((wind_start_x + wind_icon_sz + 8, y + 16), wind_str, fill=BLACK, font=font_wind)
+
+        # Weather icon + label (row 1)
+        icon_sz = 48
+        icon1_x = SIDE_PADDING + 10
+        icon1_y = y + 92
+        draw_icon(draw, weather.current_icon, icon1_x, icon1_y, icon_sz, BLACK)
+        desc_label = weather.current_desc
+        draw.text((icon1_x + icon_sz + 8, icon1_y + 14), desc_label, fill=BLACK, font=font_label)
+
+        # Rain icon + percentage (row 2, below)
+        icon2_y = icon1_y + icon_sz + 2
+        draw_icon(draw, "rain", icon1_x, icon2_y, icon_sz, BLACK)
+        rain_str = f"{int(round(weather.precip_probability))}%"
+        draw.text((icon1_x + icon_sz + 8, icon2_y + 8), rain_str, fill=BLACK, font=font_label)
 
     # --- VERTICAL DIVIDER ---
     draw.line([(divider_x, y + 12), (divider_x, section_bottom - 12)], fill=BLACK, width=2)

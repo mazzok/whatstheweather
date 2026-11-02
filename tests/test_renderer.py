@@ -288,3 +288,35 @@ def test_render_display_todays_avg_temp_is_bigger():
         f"expected today's avg temp glyph ({today_height}px) to be noticeably "
         f"taller than a past day's ({past_height}px)"
     )
+
+
+def _weather_section(img: Image.Image) -> Image.Image:
+    # Image is rotated 180°, so the weather band sits just above the status bar.
+    top = DISPLAY_HEIGHT - STATUS_BAR_H - WEATHER_SECTION_H
+    return img.crop((0, top, DISPLAY_WIDTH, DISPLAY_HEIGHT - STATUS_BAR_H))
+
+
+def _error_weather(temp: float, wind: float, direction: str) -> WeatherData:
+    return WeatherData(
+        current_temp=temp, current_icon="overcast", current_desc="",
+        wind_speed=wind, wind_direction=direction, precip_probability=0,
+        temp_min_today=temp, temp_max_today=temp,
+        error="Wetterdaten nicht verfügbar",
+    )
+
+
+def test_render_display_hides_values_when_weather_unavailable():
+    """Placeholder numbers must not appear as if they were real readings."""
+    a = render_display(_error_weather(0, 0, "N"), battery_pct=78, off_grid_days=2)
+    b = render_display(_error_weather(23, 40, "SW"), battery_pct=78, off_grid_days=2)
+    assert list(_weather_section(a).getdata()) == list(_weather_section(b).getdata())
+
+
+def test_render_display_hides_values_when_error_passed_explicitly():
+    with patch("src.renderer.date") as mock_date:
+        mock_date.today.return_value = date(2026, 4, 17)
+        ok = render_display(_sample_weather(), battery_pct=78, off_grid_days=2)
+        err = render_display(_sample_weather(), battery_pct=78, off_grid_days=2, error="Kein Netz")
+        unavailable = render_display(_error_weather(0, 0, "N"), battery_pct=78, off_grid_days=2)
+    assert list(_weather_section(err).getdata()) == list(_weather_section(unavailable).getdata())
+    assert list(_weather_section(ok).getdata()) != list(_weather_section(err).getdata())

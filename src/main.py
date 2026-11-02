@@ -25,12 +25,13 @@ def _wait_for_network(timeout: int = NETWORK_TIMEOUT) -> bool:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         try:
-            subprocess.run(
+            result = subprocess.run(
                 ["ping", "-c", "1", "-W", "1", "1.1.1.1"],
                 capture_output=True,
                 timeout=3,
             )
-            return True
+            if result.returncode == 0:
+                return True
         except Exception:
             pass
         time.sleep(NETWORK_CHECK_INTERVAL)
