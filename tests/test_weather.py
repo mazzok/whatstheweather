@@ -283,11 +283,11 @@ class TestFetchForecast:
             "features": [{
                 "properties": {
                     "parameters": {
-                        "t2m": {"data": [15.0, 17.0, 16.0]},
+                        "2t": {"data": [15.0, 17.0, 16.0]},
                         "sy": {"data": [1.0, 1.0, 3.0]},
-                        "u10m": {"data": [2.0, 3.0, 1.0]},
-                        "v10m": {"data": [1.0, 1.0, 2.0]},
-                        "rr_acc": {"data": [0.0, 0.1, 0.0]},
+                        "10u": {"data": [2.0, 3.0, 1.0]},
+                        "10v": {"data": [1.0, 1.0, 2.0]},
+                        "tp": {"data": [0.0, 0.1, 0.0]},
                     }
                 }
             }]
@@ -314,6 +314,17 @@ class TestFetchForecast:
         with patch("src.weather.requests.get", side_effect=Exception("timeout")):
             result = fetch_forecast(48.2082, 16.3738)
         assert result is None
+
+    def test_requests_nwp_v2_dataset(self):
+        """nwp-v1-1h-2500m stopped receiving model runs on 2026-10-30."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = self._make_forecast_response()
+        with patch("src.weather.requests.get", return_value=mock_response) as mock_get:
+            fetch_forecast(48.2082, 16.3738)
+        url = mock_get.call_args[0][0]
+        assert "/timeseries/forecast/nwp-v2-1h-1km?" in url
+        assert "parameters=2t,sy,10u,10v,tp&" in url
 
 
 # ---------------------------------------------------------------------------
@@ -410,11 +421,11 @@ class TestGetWeather:
             "features": [{
                 "properties": {
                     "parameters": {
-                        "t2m": {"data": t2m_data},
+                        "2t": {"data": t2m_data},
                         "sy": {"data": sy_data},
-                        "u10m": {"data": u10m_data},
-                        "v10m": {"data": v10m_data},
-                        "rr_acc": {"data": rr_acc_data},
+                        "10u": {"data": u10m_data},
+                        "10v": {"data": v10m_data},
+                        "tp": {"data": rr_acc_data},
                     }
                 }
             }]
@@ -471,7 +482,7 @@ class TestGetWeather:
         params = forecast["features"][0]["properties"]["parameters"]
         for key in params:
             params[key]["data"][0] = None
-        params["rr_acc"]["data"][5] = None
+        params["tp"]["data"][5] = None
         with patch("src.weather.fetch_station_metadata", return_value=[]), \
              patch("src.weather.fetch_forecast", return_value=forecast), \
              patch("src.weather.fetch_openmeteo_daily", return_value=[]):

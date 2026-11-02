@@ -329,8 +329,8 @@ def fetch_openmeteo_daily(lat: float, lon: float) -> list[DayForecast]:
 def fetch_forecast(lat: float, lon: float) -> dict | None:
     """Fetch NWP forecast for (lat, lon). Returns raw JSON dict or None."""
     url = (
-        f"{BASE_URL}/v1/timeseries/forecast/nwp-v1-1h-2500m"
-        f"?parameters=t2m,sy,u10m,v10m,rr_acc&lat_lon={lat},{lon}"
+        f"{BASE_URL}/v1/timeseries/forecast/nwp-v2-1h-1km"
+        f"?parameters=2t,sy,10u,10v,tp&lat_lon={lat},{lon}"
     )
     try:
         resp = requests.get(url, timeout=TIMEOUT)
@@ -382,7 +382,7 @@ def _drop_missing_hours(forecast_data: dict | None) -> dict | None:
         return None
     timestamps = forecast_data.get("timestamps", [])
     params = forecast_data["features"][0]["properties"]["parameters"]
-    required = [params[k]["data"] for k in ("t2m", "u10m", "v10m")]
+    required = [params[k]["data"] for k in ("2t", "10u", "10v")]
     keep = [
         i for i in range(len(timestamps))
         if all(i < len(data) and data[i] is not None for data in required)
@@ -439,11 +439,11 @@ def get_weather(lat: float, lon: float) -> WeatherData:
     if forecast_data:
         timestamps = forecast_data.get("timestamps", [])
         props = forecast_data["features"][0]["properties"]["parameters"]
-        t2m_data = props["t2m"]["data"]
+        t2m_data = props["2t"]["data"]
         sy_data = props["sy"]["data"]
-        u10m_data = props["u10m"]["data"]
-        v10m_data = props["v10m"]["data"]
-        rr_acc_data = props.get("rr_acc", {}).get("data", [0.0] * len(timestamps))
+        u10m_data = props["10u"]["data"]
+        v10m_data = props["10v"]["data"]
+        precip_data = props.get("tp", {}).get("data", [0.0] * len(timestamps))
 
         day_forecasts = aggregate_daily_forecast(timestamps, t2m_data, sy_data)
 
@@ -503,10 +503,10 @@ def get_weather(lat: float, lon: float) -> WeatherData:
 
         current_desc = WEATHER_DESCRIPTIONS.get(current_icon, "")
 
-        # Precipitation probability: fraction of forecast hours today with rr_acc > 0
+        # Precipitation probability: fraction of forecast hours today with tp > 0
         today_str = datetime.now(timezone.utc).date().isoformat()
         today_precip = [
-            rr_acc_data[i] for i, ts in enumerate(timestamps)
+            precip_data[i] for i, ts in enumerate(timestamps)
             if ts[:10] == today_str
         ]
         if today_precip:
