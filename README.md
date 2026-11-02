@@ -353,7 +353,20 @@ Für den Fall, dass die App beim Boot kein bekanntes WLAN findet:
 
 ```bash
 sudo bash setup/install_wifi_connect.sh
+ls /usr/local/share/wifi-connect/ui   # muss index.html + static/ enthalten
 ```
+
+Das Skript installiert das Binary nach `/usr/local/sbin/wifi-connect` **und** die
+Setup-Webseite (Captive Portal) nach `/usr/local/share/wifi-connect/ui` — die wird von
+Balena als separates `wifi-connect-ui.tar.gz` ausgeliefert. Fehlt der `ui`-Ordner,
+verbindet sich das Handy nach dem QR-Scan zwar mit dem Hotspot, bekommt aber kein
+Formular zur WLAN-Eingabe.
+
+Ablauf ohne bekanntes WLAN: Die App wartet bis zu 30s auf Netz (Ping auf `1.1.1.1`),
+zeigt dann den QR-Code an und startet den Hotspot `WeatherDisplay` (Passwort aus
+`config.yaml`). QR scannen → mit dem Hotspot verbinden → im Formular das WLAN wählen.
+Wird innerhalb von 15 Minuten nichts eingerichtet, zeigt das Display
+"Fehler: Kein Netz" und der Pi fährt bis zum nächsten Schedule-Boot herunter.
 
 ### 11. systemd-Service einrichten
 
@@ -418,6 +431,13 @@ Charger-Wake-Funktion end-to-end testen:
 5. Innerhalb von ~60s sollte sich das Display aktualisieren
 6. Ladegerät abziehen → nach dem nächsten 2h-Poll ein letztes Update, dann Shutdown
 
+QR-Code-Provisionierung end-to-end testen (nicht per SSH möglich — `nmcli`-Trennen
+kappt die eigene Session):
+1. Bekanntes WLAN vorübergehend unerreichbar machen (Router-WLAN aus oder SSID umbenennen)
+2. Pi booten → nach ~30s erscheint der QR-Code
+3. QR scannen, mit `WeatherDisplay` verbinden, im Formular das WLAN eintragen
+4. Danach lädt die App die Wetterdaten und aktualisiert das Display
+
 ### Laufzeit-Dateien
 
 Die App legt zur Laufzeit auf dem Pi eigene State-/Log-Dateien im Home-Verzeichnis an
@@ -425,10 +445,14 @@ Die App legt zur Laufzeit auf dem Pi eigene State-/Log-Dateien im Home-Verzeichn
 
 | Datei | Zweck |
 |-------|-------|
-| `~/.weather_cache.json` | Letzter erfolgreicher Wetter-Fetch (Fallback bei API-/Netzwerkfehler) |
 | `~/.weather_recharge` | Datum + Batterie-% des letzten Ladevorgangs (Off-Grid-Tage-Zähler) |
 | `~/.weather_battery_log.csv` | Ein Eintrag pro Boot: Timestamp, Batterie-V/%, USB-V, Charging |
-| `~/.weather_display.log` | Log-Datei im Produktionsmodus (Debug-Modus loggt nach stdout) |
+| `~/.weather_display.log` | Log-Datei im Produktionsmodus (Debug-Modus loggt nach stdout), inkl. Tracebacks bei Abstürzen |
+
+Es gibt bewusst **keinen** Wetter-Cache mehr: Schlägt der Fetch fehl, zeigt das Display
+"--°C" und den Fehler in der Statusleiste statt veralteter Daten. Eine evtl. noch
+vorhandene `~/.weather_cache.json` aus älteren Versionen wird nicht mehr gelesen und
+kann gelöscht werden.
 
 ### Bekannte Stolpersteine (aus der Praxis)
 
@@ -487,6 +511,24 @@ Die App legt zur Laufzeit auf dem Pi eigene State-/Log-Dateien im Home-Verzeichn
   langer Ordnereintrag" oder wiederhergestellte "verlorene Ketten", ist das die
   Bestätigung. Repariert werden kann die Boot-Partition selbst nicht zuverlässig —
   SD-Karte neuflashen.
+- **Display zeigt "--°C" und "Fehler: Wetterdaten nicht verfügbar", obwohl WLAN da ist** —
+  `~/.weather_display.log` prüfen. Steht dort `Forecast contains no usable hours`, liefert
+  GeoSphere für das Vorhersage-Dataset nur noch `null`-Werte. Ursache war bisher, dass
+  GeoSphere ein Dataset eingestellt hat (`nwp-v1-1h-2500m` bekam am 2026-10-30 den
+  letzten Modelllauf, Nachfolger `nwp-v2-1h-1km`, umgestellt in `fetch_forecast()`).
+  Prüfen, ob noch neue Läufe kommen:
+  ```bash
+  curl -s https://dataset.api.hub.geosphere.at/v1/timeseries/forecast/nwp-v2-1h-1km/metadata \
+    | python3 -c "import json,sys; print(json.load(sys.stdin)['last_forecast_reftime'])"
+  ```
+  Ist das Datum mehr als ~1 Tag alt, unter `https://dataset.api.hub.geosphere.at/v1/datasets`
+  nach einem neueren `nwp-v*`-Dataset suchen (Parameternamen können sich ändern).
+- **Display aktualisiert sich nicht, Pi bleibt aber an** — `~/.weather_display.log` und
+  `journalctl -u weather-display.service -b` nach einem Traceback durchsuchen. Seit dem
+  Crash-Fix wird jede Exception ins Log geschrieben und der Pi fährt trotzdem herunter;
+  bleibt er dennoch an, hängt der Prozess (`pgrep -af python`). Display-Hardware separat
+  mit dem Waveshare-Demo prüfen (Service vorher stoppen):
+  `python3 ~/e-Paper/RaspberryPi_JetsonNano/python/examples/epd_7in5_V2_test.py`
 - **Pi bleibt dauerhaft wach, obwohl das Ladegerät entfernt wurde** — prüfen, ob
   `_run_charging_mode` das Laden noch fälschlich erkennt: `cat ~/.weather_display.log`
   nach `Reconciling WittyPi schedule`/`Charger removed` durchsuchen, das Power-Mode-Register
