@@ -12,12 +12,19 @@ case "$ARCH" in
 esac
 
 BASE_URL="https://github.com/balena-os/wifi-connect/releases/latest/download"
+# wifi-connect finds its captive-portal page here when run from /usr/local/sbin
+UI_DIR="/usr/local/share/wifi-connect/ui"
 TMP=$(mktemp -d)
 
 echo "Downloading $TARBALL..."
 curl -fsSL "$BASE_URL/$TARBALL" | tar -xz -C "$TMP"
 
 install -m 755 "$TMP/wifi-connect" /usr/local/sbin/wifi-connect
+
+echo "Downloading captive portal UI..."
+rm -rf "$UI_DIR"
+mkdir -p "$UI_DIR"
+curl -fsSL "$BASE_URL/wifi-connect-ui.tar.gz" | tar -xz -C "$UI_DIR"
 rm -rf "$TMP"
 
 echo "Installed: $(wifi-connect --version)"
