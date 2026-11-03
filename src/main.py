@@ -11,6 +11,7 @@ from src.weather import get_weather
 from src.renderer import render_display
 from src.display import update_display_4gray
 from src.wittypi import WittyPi
+from src import provisioning
 from src.provisioning import render_provisioning_screen, run_provisioning
 
 CONFIG_PATH = "config.yaml"
@@ -42,19 +43,22 @@ def _wait_for_network(timeout: int = NETWORK_TIMEOUT) -> bool:
 def run_once(config: dict, battery_pct: int, off_grid_days: int, charging: bool) -> None:
     logger = logging.getLogger(__name__)
 
-    has_network = _wait_for_network()
+    force_provisioning = config.get("force_provisioning", False)
+    has_network = False if force_provisioning else _wait_for_network()
 
     if not has_network:
         ssid = config.get("provisioning_ssid", "WeatherDisplay")
         password = config.get("provisioning_password", "weather123")
         render_provisioning_screen(ssid, password, update_display_4gray)
-        success = run_provisioning(ssid, password, timeout=900)
+        success = run_provisioning(
+            ssid, password, timeout=config.get("provisioning_timeout", 900)
+        )
         if not success:
             image = render_display(
                 get_weather(0, 0),
                 battery_pct=battery_pct,
                 off_grid_days=off_grid_days,
-                error="Kein Netz",
+                error=f"Kein Netz: {provisioning.last_error}" if provisioning.last_error else "Kein Netz",
                 charging=charging,
             )
             update_display_4gray(image)
@@ -122,11 +126,17 @@ def _run_charging_mode(config: dict, wittypi: WittyPi) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Weather display")
     parser.add_argument("--debug", action="store_true", help="Enable debug mode (overrides config)")
+    parser.add_argument(
+        "--force-provisioning", action="store_true",
+        help="Skip the network check and start QR WiFi provisioning (for testing)",
+    )
     args = parser.parse_args()
 
     config = load_config(CONFIG_PATH)
     if args.debug:
         config["debug"] = True
+    if args.force_provisioning:
+        config["force_provisioning"] = True
 
     level = logging.DEBUG if config["debug"] else logging.INFO
     logging.basicConfig(

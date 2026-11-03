@@ -18,30 +18,39 @@ DISPLAY_HEIGHT = 480
 
 logger = logging.getLogger(__name__)
 
+# Why the last run_provisioning() returned False; shown on the error screen.
+last_error = ""
+
 
 def run_provisioning(ssid: str, password: str, timeout: int = 900) -> bool:
     """Start Balena WiFi Connect and wait for successful network configuration.
 
     Returns True if the user configured WiFi within `timeout` seconds.
-    Returns False on timeout or if the wifi-connect binary is not found.
+    Returns False on timeout or if the wifi-connect binary is not found;
+    `last_error` then holds a short German reason.
     """
+    global last_error
+    last_error = ""
     try:
         proc = subprocess.Popen(
-            ["sudo", "wifi-connect", "--ssid", ssid, "--password", password]
+            ["sudo", "wifi-connect", "--portal-ssid", ssid, "--portal-passphrase", password]
         )
     except FileNotFoundError:
         logger.error("wifi-connect binary not found at /usr/local/sbin/wifi-connect")
+        last_error = "wifi-connect fehlt"
         return False
 
     try:
         rc = proc.wait(timeout=timeout)
         if rc != 0:
             logger.error("wifi-connect exited with code %d", rc)
+            last_error = f"wifi-connect Exit {rc}"
             return False
         logger.info("wifi-connect exited — network configured")
         return True
     except subprocess.TimeoutExpired:
         logger.warning("Provisioning timed out after %ds", timeout)
+        last_error = "Zeitüberschreitung"
         proc.terminate()
         try:
             proc.wait(timeout=5)
@@ -62,7 +71,7 @@ def render_provisioning_screen(
     qr = qrcode.QRCode(box_size=6, border=2)
     qr.add_data(f"WIFI:T:WPA;S:{ssid};P:{password};;")
     qr.make(fit=True)
-    qr_img = qr.make_image(fill_color=BLACK, back_color=WHITE).convert("L")
+    qr_img = qr.make_image(fill_color="black", back_color="white").convert("L")
     qr_w, qr_h = qr_img.size
 
     # Compose display image

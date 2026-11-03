@@ -25,7 +25,7 @@ class TestRunProvisioning:
             from src.provisioning import run_provisioning
             run_provisioning("MyNet", "s3cr3t", timeout=10)
         mock_popen.assert_called_once_with(
-            ["sudo", "wifi-connect", "--ssid", "MyNet", "--password", "s3cr3t"]
+            ["sudo", "wifi-connect", "--portal-ssid", "MyNet", "--portal-passphrase", "s3cr3t"]
         )
 
     def test_returns_false_on_timeout(self):
@@ -99,3 +99,44 @@ class TestRenderProvisioningScreen:
             )
             render_provisioning_screen("MyNet", "mypass", lambda img: None)
         mock_qr.add_data.assert_called_once_with("WIFI:T:WPA;S:MyNet;P:mypass;;")
+
+
+class TestFailureReason:
+    def test_reason_for_missing_binary(self):
+        with patch("src.provisioning.subprocess.Popen", side_effect=FileNotFoundError()):
+            from src import provisioning
+            provisioning.run_provisioning("TestSSID", "testpass", timeout=10)
+        assert provisioning.last_error == "wifi-connect fehlt"
+
+    def test_reason_for_nonzero_exit(self):
+        with patch("src.provisioning.subprocess.Popen") as mock_popen:
+            mock_popen.return_value = MagicMock(wait=MagicMock(return_value=3))
+            from src import provisioning
+            provisioning.run_provisioning("TestSSID", "testpass", timeout=10)
+        assert provisioning.last_error == "wifi-connect Exit 3"
+
+    def test_reason_for_timeout(self):
+        with patch("src.provisioning.subprocess.Popen") as mock_popen:
+            proc = MagicMock()
+            proc.wait.side_effect = [subprocess.TimeoutExpired(cmd="x", timeout=1), 0]
+            mock_popen.return_value = proc
+            from src import provisioning
+            provisioning.run_provisioning("TestSSID", "testpass", timeout=1)
+        assert provisioning.last_error == "Zeitüberschreitung"
+
+    def test_reason_cleared_on_success(self):
+        with patch("src.provisioning.subprocess.Popen") as mock_popen:
+            mock_popen.return_value = MagicMock(wait=MagicMock(return_value=0))
+            from src import provisioning
+            provisioning.last_error = "old"
+            provisioning.run_provisioning("TestSSID", "testpass", timeout=10)
+        assert provisioning.last_error == ""
+
+
+class TestQrContrast:
+    def test_qr_background_is_pure_white(self):
+        from src.provisioning import render_provisioning_screen
+        captured = []
+        render_provisioning_screen("TestNet", "pass123", lambda img: captured.append(img))
+        # just inside the QR quiet zone, left of the first finder pattern
+        assert captured[0].getpixel((400, 82)) == 255

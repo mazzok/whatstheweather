@@ -251,3 +251,63 @@ class TestChargingIndicatorThreading:
 
         final_call_kwargs = mock_run_once.call_args_list[-1].kwargs
         assert final_call_kwargs["charging"] is False
+
+
+class TestProvisioningFlow:
+    @patch("src.main.update_display_4gray")
+    @patch("src.main.render_display")
+    @patch("src.main.get_weather")
+    @patch("src.main.provisioning")
+    @patch("src.main.run_provisioning", return_value=False)
+    @patch("src.main.render_provisioning_screen")
+    @patch("src.main._wait_for_network", return_value=False)
+    def test_failure_reason_shown_on_error_screen(
+        self, mock_wait, mock_render_prov, mock_run_prov, mock_prov_mod, mock_weather, mock_render, mock_update
+    ):
+        from src.main import run_once
+
+        mock_prov_mod.last_error = "wifi-connect Exit 1"
+        run_once(
+            {"debug": False, "provisioning_ssid": "x", "provisioning_password": "y"},
+            battery_pct=80, off_grid_days=0, charging=False,
+        )
+
+        _, kwargs = mock_render.call_args
+        assert kwargs["error"] == "Kein Netz: wifi-connect Exit 1"
+
+    @patch("src.main.update_display_4gray")
+    @patch("src.main.render_display")
+    @patch("src.main.get_weather")
+    @patch("src.main.run_provisioning", return_value=False)
+    @patch("src.main.render_provisioning_screen")
+    @patch("src.main._wait_for_network", return_value=True)
+    def test_force_provisioning_skips_network_check(
+        self, mock_wait, mock_render_prov, mock_run_prov, mock_weather, mock_render, mock_update
+    ):
+        from src.main import run_once
+
+        run_once(
+            {"debug": False, "force_provisioning": True, "provisioning_ssid": "x", "provisioning_password": "y"},
+            battery_pct=80, off_grid_days=0, charging=False,
+        )
+
+        mock_render_prov.assert_called_once()
+        mock_run_prov.assert_called_once()
+
+    @patch("src.main.update_display_4gray")
+    @patch("src.main.render_display")
+    @patch("src.main.get_weather")
+    @patch("src.main.run_provisioning", return_value=False)
+    @patch("src.main.render_provisioning_screen")
+    @patch("src.main._wait_for_network", return_value=False)
+    def test_provisioning_timeout_comes_from_config(
+        self, mock_wait, mock_render_prov, mock_run_prov, mock_weather, mock_render, mock_update
+    ):
+        from src.main import run_once
+
+        run_once(
+            {"debug": False, "provisioning_timeout": 120, "provisioning_ssid": "x", "provisioning_password": "y"},
+            battery_pct=80, off_grid_days=0, charging=False,
+        )
+
+        assert mock_run_prov.call_args.kwargs["timeout"] == 120
